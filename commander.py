@@ -271,7 +271,7 @@ def main():
     else:
         target_host = 'localhost'
 
-    knock_sequence = [7000, 8000, 9000]
+    knock_sequence = [7000, 1111, 8000, 2222, 9000]
     command_port = 9999
 
     print("=" * 60)
@@ -293,8 +293,6 @@ def main():
         print("\n[*] Interrupted by user")
     except Exception as e:
         print(f"[!] Error: {e}")
-    finally:
-        commander.disconnect()
 
 
 if __name__ == "__main__":

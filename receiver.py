@@ -1,7 +1,7 @@
 import socket
 import struct
 
-LISTEN_IP = "192.168.5.61"
+LISTEN_IP = "192.168.5.61" # should be the IP of the host that completed the port-knocking sequence
 DEST_PORT = 9999 # filter by expected dst_port value (== total_chunks)
 OUTPUT_FILE = "received_file.txt"
 REAL_UDP_LEN = 12 # 8 byte header + 4 byte dummy payload
