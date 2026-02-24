@@ -2,9 +2,9 @@ import socket
 import struct
 
 LISTEN_IP = "192.168.5.61"
-DEST_PORT = 9999    # filter by expected dst_port value (== total_chunks)
+DEST_PORT = 9999 # filter by expected dst_port value (== total_chunks)
 OUTPUT_FILE = "received_file.txt"
-REAL_UDP_LEN = 12  # 8 byte header + 4 byte dummy payload
+REAL_UDP_LEN = 12 # 8 byte header + 4 byte dummy payload
 
 def parse_covert_packet(raw):
     udp = raw[20:28]

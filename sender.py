@@ -28,6 +28,8 @@ def build_ip_header(src_ip, dst_ip, payload_len):
     src = socket.inet_aton(src_ip)
     dst = socket.inet_aton(dst_ip)
 
+    # struct library format specifiers
+    # B = int to 1 byte, H = int to 2 bytes, 4s = 4 bytes to 4 bytes
     hdr = struct.pack("!BBHHHBBH4s4s",
         ver_ihl, tos, tot_len, pkt_id,
         frag, ttl, proto, 0, src, dst)
@@ -38,11 +40,11 @@ def build_ip_header(src_ip, dst_ip, payload_len):
 
 def build_covert_udp(data_chunk, seq_num, total_chunks):
     payload = b'\x00' * 4
-    udp_len = 8 + len(payload)  # = 12, the real length
+    udp_len = 8 + len(payload) # = 12, the real length
 
-    src_port = seq_num                              # covert: sequence number
-    dst_port = DEST_PORT                            # now a real fixed port
-    covert_length = udp_len + total_chunks               # covert: total chunks encoded in length
+    src_port = seq_num # covert: sequence number
+    dst_port = DEST_PORT # now a real fixed port
+    covert_length = udp_len + total_chunks # covert: total chunks encoded in length
     covert_chksum = struct.unpack("!H", data_chunk.ljust(2, b'\x00'))[0]  # file data
 
     return struct.pack("!HHHH",
