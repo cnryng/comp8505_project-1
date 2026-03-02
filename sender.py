@@ -4,9 +4,9 @@ import os
 import math
 import time
 
-DEST_IP = "192.168.5.61"
+DEST_IP = "192.168.5.68"
 DEST_PORT = 9999
-SRC_IP = "192.168.5.61"
+SRC_IP = "192.168.5.68"
 CHUNK_SIZE = 2   # bytes per packet (fits in manipulated fields)
 
 def checksum(data):
@@ -42,8 +42,8 @@ def build_covert_udp(data_chunk, seq_num, total_chunks):
     payload = b'\x00' * 4
     udp_len = 8 + len(payload) # = 12, the real length
 
-    src_port = seq_num # covert: sequence number
-    dst_port = DEST_PORT # now a real fixed port
+    src_port = 0x8000 # fixed, could be used for command code
+    dst_port = DEST_PORT
     covert_length = udp_len + total_chunks # covert: total chunks encoded in length
     covert_chksum = struct.unpack("!H", data_chunk.ljust(2, b'\x00'))[0]  # file data
 

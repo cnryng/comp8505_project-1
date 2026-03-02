@@ -10,49 +10,50 @@ def parse_covert_packet(raw):
     udp = raw[20:28]
     src_port, dst_port, length, covert_checksum = struct.unpack("!HHHH", udp)
 
-    # Filter: only our stream
     if dst_port != DEST_PORT:
         return None
 
-    seq_num = src_port
-    total_chunks = length - REAL_UDP_LEN   # decode total_chunks from length offset
+    #total_chunks = length - REAL_UDP_LEN
     data_chunk = struct.pack("!H", covert_checksum)
 
-    return seq_num, total_chunks, data_chunk
-
+    #return total_chunks, data_chunk
+    return data_chunk
 
 def receive_file():
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
-
-    chunks = {}
-    total_expected = None
+    s.settimeout(3)
+    chunks = []
+    # total_expected = None
 
     print("[*] Listening for covert packets...")
 
     while True:
-        raw, addr = s.recvfrom(65535)
+        try:
+            raw, addr = s.recvfrom(65535)
+        except socket.timeout:
+            print("[*] Timeout reached, assuming transfer complete")
+            break
 
         try:
-            result = parse_covert_packet(raw)
-            if result is None:
+            data = parse_covert_packet(raw)
+            if data is None:
                 continue
-            seq, total, data = result
         except Exception:
             continue
 
-        if total <= 0 or total > 50000:
-            continue
+        # if total <= 0 or total > 50000:
+        #     continue
 
-        if total_expected is None:
-            total_expected = total
-            print(f"[*] Expecting {total_expected} chunks...")
+        # if total_expected is None:
+        #     total_expected = total
+        #     print(f"[*] Expecting {total_expected} chunks...")
 
-        chunks[seq] = data
+        chunks.append(data)
 
-        if len(chunks) >= total_expected:
-            break
+        # if len(chunks) >= total_expected:
+        #     break
 
-    result = b"".join(chunks[i] for i in sorted(chunks.keys()))
+    result = b"".join(chunks)
 
     with open(OUTPUT_FILE, "wb") as f:
         f.write(result)
