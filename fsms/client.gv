@@ -1,26 +1,50 @@
-digraph Client{
-    node [shape="box"];
-    START -> PASRE_ARGS [label="parse_args"];
-    PASRE_ARGS -> HANDLE_ARGS [label="handle_args"];
-    PASRE_ARGS -> ERROR [label="invalid args"];
-    HANDLE_ARGS -> LISTEN_FOR_PORT_KNOCK_SEQUENCE [label="start_client"];
+digraph Client {
+    node [shape=box];
 
-    LISTEN_FOR_PORT_KNOCK_SEQUENCE -> LISTEN_FOR_PORT_KNOCK_SEQUENCE [label="port_knock_record"];
-    LISTEN_FOR_PORT_KNOCK_SEQUENCE -> LISTEN_FOR_COMMANDS [label="authorize_connection"];
+    START [shape=circle];
+    LISTENING_FOR_KNOCKS;
+    KNOCK_DETECTED;
+    VALIDATING_KNOCK_SEQUENCE;
+    COVERT_COMMAND_RECEIVED;
+    CHECKING_IP_AUTHORIZATION;
+    COMMAND_REJECTED;
+    EXTRACTING_COMMAND_FROM_CHECKSUM;
+    DECODING_COMMAND_TYPE;
+    EXECUTING_PING;
+    EXECUTING_SHELL;
+    EXECUTING_READ_FILE;
+    EXECUTING_LIST_DIR;
+    EXECUTING_SYSINFO;
+    EXECUTING_DISCONNECT;
+    REVOKING_AUTHORIZATION;
+    UNKNOWN_COMMAND;
 
-    // HANDLE_ARGS -> ERROR [label="file not found"];
-    // CONVERT_TO_BINARY_STRING -> ENCRYPT_BINARY [label="encrypt_binary"];
-    // CONVERT_TO_BINARY_STRING -> ERROR [label="conversion failed"];
-    // ENCRYPT_BINARY -> LOAD_PNG [label="load_png"];
-    // ENCRYPT_BINARY -> ERROR [label="encryption failed"];
-    // LOAD_PNG -> EMBED_BINARY_IN_PNG [label="embed_binary_in_png"];
-    // LOAD_PNG -> ERROR [label="PNG load failed"];
-    // EMBED_BINARY_IN_PNG -> OUTPUT_PNG [label="print_success_msg"];
-    // EMBED_BINARY_IN_PNG -> ERROR [label="insufficient capacity"];
-    // OUTPUT_PNG -> CLEANUP [label="cleanup"];
-    // OUTPUT_PNG -> ERROR [label="write failed"];
-    // ERROR -> CLEANUP;
-    // CLEANUP -> EXIT;
-    START [shape=doublecircle];
-    EXIT [shape=doublecircle];
+    START -> LISTENING_FOR_KNOCKS [label="start()"];
+
+    LISTENING_FOR_KNOCKS -> VALIDATING_KNOCK_SEQUENCE [label="record_knock()"];
+    VALIDATING_KNOCK_SEQUENCE -> CONNECTION_AUTHORIZED [label="authorize_connection()"];
+    VALIDATING_KNOCK_SEQUENCE -> LISTENING_FOR_KNOCKS [label="listen_for_knocks()"];
+    CONNECTION_AUTHORIZED -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+
+    LISTENING_FOR_COMMANDS -> COVERT_COMMAND_RECEIVED [label="listen_for_covert_commands()"];
+    COVERT_COMMAND_RECEIVED -> CHECKING_IP_AUTHORIZATION [label="parse_udp_packet()"];
+    CHECKING_IP_AUTHORIZATION -> COMMAND_REJECTED [label="is_authorized()"];
+    CHECKING_IP_AUTHORIZATION -> EXTRACTING_COMMAND_FROM_CHECKSUM [label="is_authorized()"];
+    COMMAND_REJECTED -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+    EXTRACTING_COMMAND_FROM_CHECKSUM -> DECODING_COMMAND_TYPE [label="extract_checksum()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_PING [label="process_command()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_SHELL [label="process_command()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_READ_FILE [label="process_command()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_LIST_DIR [label="process_command()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_SYSINFO [label="process_command()"];
+    DECODING_COMMAND_TYPE -> EXECUTING_DISCONNECT [label="process_command()"];
+    DECODING_COMMAND_TYPE -> UNKNOWN_COMMAND [label="process_command()"];
+    EXECUTING_PING -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+    EXECUTING_SHELL -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="subprocess.run()"];
+    EXECUTING_READ_FILE -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="open()"];
+    EXECUTING_LIST_DIR -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="os.listdir()"];
+    EXECUTING_SYSINFO -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="platform.system()"];
+    EXECUTING_DISCONNECT -> REVOKING_AUTHORIZATION [label="revoke_authorization()"];
+    UNKNOWN_COMMAND -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+    REVOKING_AUTHORIZATION -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
 }
