@@ -1,0 +1,26 @@
+digraph Client{
+    node [shape="box"];
+    START -> PASRE_ARGS [label="parse_args"];
+    PASRE_ARGS -> HANDLE_ARGS [label="handle_args"];
+    PASRE_ARGS -> ERROR [label="invalid args"];
+    HANDLE_ARGS -> LISTEN_FOR_PORT_KNOCK_SEQUENCE [label="start_client"];
+
+    LISTEN_FOR_PORT_KNOCK_SEQUENCE -> LISTEN_FOR_PORT_KNOCK_SEQUENCE [label="port_knock_record"];
+    LISTEN_FOR_PORT_KNOCK_SEQUENCE -> LISTEN_FOR_COMMANDS [label="authorize_connection"];
+
+    // HANDLE_ARGS -> ERROR [label="file not found"];
+    // CONVERT_TO_BINARY_STRING -> ENCRYPT_BINARY [label="encrypt_binary"];
+    // CONVERT_TO_BINARY_STRING -> ERROR [label="conversion failed"];
+    // ENCRYPT_BINARY -> LOAD_PNG [label="load_png"];
+    // ENCRYPT_BINARY -> ERROR [label="encryption failed"];
+    // LOAD_PNG -> EMBED_BINARY_IN_PNG [label="embed_binary_in_png"];
+    // LOAD_PNG -> ERROR [label="PNG load failed"];
+    // EMBED_BINARY_IN_PNG -> OUTPUT_PNG [label="print_success_msg"];
+    // EMBED_BINARY_IN_PNG -> ERROR [label="insufficient capacity"];
+    // OUTPUT_PNG -> CLEANUP [label="cleanup"];
+    // OUTPUT_PNG -> ERROR [label="write failed"];
+    // ERROR -> CLEANUP;
+    // CLEANUP -> EXIT;
+    START [shape=doublecircle];
+    EXIT [shape=doublecircle];
+}
