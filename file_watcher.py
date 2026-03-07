@@ -4,7 +4,7 @@ File Watcher using inotify (Linux)
 Monitors a directory for file system events in real time.
 
 Requirements:
-    pip install inotify
+    sudo pip install inotify
 
 Usage:
     python file_watcher.py [directory]
@@ -15,7 +15,6 @@ import sys
 import os
 import time
 import logging
-from datetime import datetime
 
 try:
     import inotify.adapters
@@ -80,13 +79,24 @@ class FileWatcher:
         event_mask: int | None = None,
         ignore_exts: set[str] | None = None,
     ):
-        if not os.path.isdir(path):
-            raise ValueError(f"Path is not a directory: {path}")
+        path = os.path.abspath(os.path.expanduser(path))
 
-        self.path = os.path.abspath(path)
-        self.recursive = recursive
+        if os.path.isfile(path):
+            self.target_file = os.path.basename(path)
+            self.path = os.path.dirname(path)
+            self.recursive = False  # no point recursing for a single file
+        elif os.path.isdir(path):
+            self.target_file = None
+            self.path = path
+            self.recursive = recursive
+        else:
+            raise ValueError(f"Path does not exist: {path}")
+
         self.event_mask = event_mask or self.DEFAULT_MASK
         self.ignore_exts = ignore_exts or {".swp", ".swx", "~"}
+
+        self.changed_dir = os.path.join(os.getcwd(), "changed_files")
+        os.makedirs(self.changed_dir, exist_ok=True)
 
         self._stats = {"total": 0, "by_type": {}}
         self._start_time = None
@@ -101,8 +111,12 @@ class FileWatcher:
         )
 
         log.info("Starting file watcher")
-        log.info("  Directory : %s", self.path)
-        log.info("  Recursive : %s", self.recursive)
+        if self.target_file:
+            log.info("  File      : %s", os.path.join(self.path, self.target_file))
+        else:
+            log.info("  Directory : %s", self.path)
+            log.info("  Recursive : %s", self.recursive)
+        log.info("  Staging   : %s", self.changed_dir)
         log.info("Press Ctrl+C to stop.\n")
 
         self._start_time = time.monotonic()
@@ -125,6 +139,10 @@ class FileWatcher:
 
     def _handle(self, type_names: list[str], watch_path: str, filename: str) -> None:
         """Process a single inotify event."""
+        # If watching a single file, ignore events for other files
+        if self.target_file and filename != self.target_file:
+            return
+
         # Skip hidden files / swap files / undesired extensions
         if filename:
             _, ext = os.path.splitext(filename)
@@ -142,11 +160,46 @@ class FileWatcher:
             label = EVENT_LABELS.get(event_name, event_name)
             log.info("%-22s  %s", label, display_path)
 
+            # Copy modified/moved files into changed_files/; remove on delete
+            if filename and event_name in ("IN_CLOSE_WRITE", "IN_MOVED_TO"):
+                # Always copy from the canonical watched path, not the event's
+                # reported path, which may be a temp file name (e.g. shadow+)
+                # in atomic-rename workflows.
+                if self.target_file:
+                    src = os.path.join(self.path, self.target_file)
+                else:
+                    src = full_path
+                self._stage_file(src)
+            elif filename and event_name in ("IN_DELETE", "IN_MOVED_FROM", "IN_DELETE_SELF"):
+                self._unstage_file(filename)
+
             # Update stats
             self._stats["total"] += 1
             self._stats["by_type"][event_name] = (
                 self._stats["by_type"].get(event_name, 0) + 1
             )
+
+    def _stage_file(self, src: str) -> None:
+        """Read the source file and write its content directly to changed_files/."""
+        dest = os.path.join(self.changed_dir, os.path.basename(src))
+        try:
+            with open(src, "rb") as f_in:
+                data = f_in.read()
+            with open(dest, "wb") as f_out:
+                f_out.write(data)
+            log.info("  -> Written to %s (%d bytes)", dest, len(data))
+        except OSError as e:
+            log.warning("  -> Could not write %s: %s", dest, e)
+
+    def _unstage_file(self, filename: str) -> None:
+        """Remove a file from the changed_files directory if it exists there."""
+        dest = os.path.join(self.changed_dir, filename)
+        if os.path.exists(dest):
+            try:
+                os.remove(dest)
+                log.info("  -> Removed from staging: %s", dest)
+            except OSError as e:
+                log.warning("  -> Could not remove %s: %s", dest, e)
 
     def _print_summary(self) -> None:
         elapsed = time.monotonic() - (self._start_time or 0)
@@ -166,15 +219,15 @@ class FileWatcher:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    watch_dir = sys.argv[1] if len(sys.argv) > 1 else "."
-    watch_dir = os.path.expanduser(watch_dir)
+    watch_path = sys.argv[1] if len(sys.argv) > 1 else "."
+    watch_path = os.path.expanduser(watch_path)
 
-    if not os.path.exists(watch_dir):
-        print(f"Error: path does not exist: {watch_dir}")
+    if not os.path.exists(watch_path):
+        print(f"Error: path does not exist: {watch_path}")
         sys.exit(1)
 
     watcher = FileWatcher(
-        path=watch_dir,
+        path=watch_path,
         recursive=True,
         ignore_exts={".swp", ".swx", ".tmp"},
     )
