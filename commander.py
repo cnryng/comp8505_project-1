@@ -172,6 +172,8 @@ class Commander:
     """
 
     def __init__(self, target_host):
+        if target_host is "localhost":
+            self.target_host = "127.0.0.1"
         self.target_host = target_host
         self.knock_ports = KNOCK_SEQUENCE
         self.command_port = COMMAND_PORT
@@ -422,7 +424,6 @@ def main():
         print("Usage: sudo python3 commander.py <target_host>")
         print("\nExample:")
         print("  sudo python3 commander.py 192.168.1.100")
-        print("  sudo python3 commander.py localhost")
         sys.exit(1)
 
     target_host = sys.argv[1]
