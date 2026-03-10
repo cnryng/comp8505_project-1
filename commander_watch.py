@@ -139,7 +139,6 @@ class Commander:
             self.protocol.prepare_recv_socket()
             time.sleep(0.1)  # give the kernel time to attach the BPF filter
 
-
         success = self.protocol.send_packet(
             self.source_ip,
             self.target_host,

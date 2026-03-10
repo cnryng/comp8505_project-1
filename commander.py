@@ -12,7 +12,7 @@ import struct
 import time
 import sys
 from enum import IntEnum
-from raw_socket_protocol import RawSocketProtocol
+from raw_socket_protocol_old import RawSocketProtocol
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
