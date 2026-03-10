@@ -384,7 +384,15 @@ class Client:
                 print(f"[DEBUG] target_file={target_file!r} watch_path={watch_path!r} recursive={recursive}")
 
                 ignore_exts = {'.swp', '.swx', '.tmp', '~'}
-                event_mask = FileWatcher.DEFAULT_MASK
+                event_mask = (
+                        inotify.constants.IN_CREATE
+                        | inotify.constants.IN_DELETE
+                        | inotify.constants.IN_MODIFY
+                        | inotify.constants.IN_MOVED_FROM
+                        | inotify.constants.IN_MOVED_TO
+                        | inotify.constants.IN_CLOSE_WRITE
+                        | inotify.constants.IN_ATTRIB
+                    )
 
                 def run_watcher():
                     import inotify.adapters
