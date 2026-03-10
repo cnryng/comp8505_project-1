@@ -110,10 +110,8 @@ class Client:
                 knock_data['knocks'].popleft()
 
             if list(knock_data['knocks']) == self.knock_sequence:
-                print(f"\n{'=' * 60}")
                 print(f"VALID KNOCK SEQUENCE from {ip_address}")
                 print(f"Authorizing for covert channel communication")
-                print(f"{'=' * 60}\n")
                 knock_data['knocks'].clear()
                 self.authorized_ips.add(ip_address)
                 return True
