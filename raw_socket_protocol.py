@@ -11,6 +11,16 @@ FLAG_END = 3
 
 DUMMY_PAYLOAD = b'\x00' * 4
 
+# Command codes that are valid responses (sent by the client back to the commander).
+# receive_data() uses this to ignore the commander's own outbound packets when
+# both sides share the same IP (single-machine testing).
+RESPONSE_COMMANDS = frozenset([
+    0x9ABC,  # ACK
+    0xABCD,  # ERROR
+    0x6789,  # FILE_WATCH  (client pushing a modified file)
+    0x7890,  # FILE_DELETE (client pushing a delete notification)
+])
+
 
 class RawSocketProtocol:
     def __init__(self):
@@ -104,9 +114,12 @@ class RawSocketProtocol:
             )
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
+            # Prefix with original length so receiver can trim padding exactly
+            framed = struct.pack('!I', len(data)) + data
+
             chunks = [
-                data[i:i + CHUNK_SIZE]
-                for i in range(0, len(data), CHUNK_SIZE)
+                framed[i:i + CHUNK_SIZE]
+                for i in range(0, len(framed), CHUNK_SIZE)
             ]
             total = len(chunks)
 
@@ -132,6 +145,7 @@ class RawSocketProtocol:
                 )
 
                 packet = ip_hdr + udp_hdr
+                print(packet)
                 sock.sendto(packet, (dst_ip, 0))
                 time.sleep(0.01)
 
@@ -207,6 +221,12 @@ class RawSocketProtocol:
                 if addr[0] != expected_ip:
                     continue
 
+                # Ignore our own outbound command packets — only accept responses
+                if parsed["command"] not in RESPONSE_COMMANDS:
+                    continue
+
+                print(packet)
+
                 seq = parsed["seq"]
                 chunks[seq] = parsed["data"]
                 total = parsed["total"]
@@ -231,9 +251,11 @@ class RawSocketProtocol:
         # Reassemble in order
         ordered = b''.join(chunks[i] for i in sorted(chunks))
 
-        # Trim trailing null padding from last chunk if data length was odd
-        if len(ordered) > 0 and ordered[-1] == 0 and (total * CHUNK_SIZE) > len(ordered):
-            ordered = ordered[:-1]
+        # First 4 bytes are the original payload length written by send_packet
+        if len(ordered) < 4:
+            return None
+        orig_len = struct.unpack('!I', ordered[:4])[0]
+        ordered  = ordered[4:4 + orig_len]
 
         return {
             "type": last_parsed["command"],
