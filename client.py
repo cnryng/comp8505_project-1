@@ -380,8 +380,8 @@ class Client:
                                     except Exception as e:
                                         print(f"[!] Watcher: could not send '{filename}': {e}")
 
-
                                 elif event_name in 'IN_DELETE':
+                                    print(f"filename = {filename}")
                                     self.send_response(src_ip, CommandType.FILE_DELETE, filename.encode('utf-8'))
                                     print(f"[*] Watcher: notified deletion of '{filename}'")
 
