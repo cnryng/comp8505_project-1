@@ -11,6 +11,16 @@ FLAG_END = 3
 
 DUMMY_PAYLOAD = b'\x00' * 4
 
+# Command codes that are valid responses (sent by the client back to the commander).
+# receive_data() uses this to ignore the commander's own outbound packets when
+# both sides share the same IP (single-machine testing).
+RESPONSE_COMMANDS = frozenset([
+    0x9ABC,  # ACK
+    0xABCD,  # ERROR
+    0x6789,  # FILE_WATCH  (client pushing a modified file)
+    0x7890,  # FILE_DELETE (client pushing a delete notification)
+])
+
 
 class RawSocketProtocol:
     def __init__(self):
@@ -132,6 +142,7 @@ class RawSocketProtocol:
                 )
 
                 packet = ip_hdr + udp_hdr
+                print(packet)
                 sock.sendto(packet, (dst_ip, 0))
                 time.sleep(0.01)
 
@@ -206,6 +217,12 @@ class RawSocketProtocol:
 
                 if addr[0] != expected_ip:
                     continue
+
+                # Ignore our own outbound command packets — only accept responses
+                if parsed["command"] not in RESPONSE_COMMANDS:
+                    continue
+
+                print(packet)
 
                 seq = parsed["seq"]
                 chunks[seq] = parsed["data"]
