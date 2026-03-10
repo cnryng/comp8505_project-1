@@ -21,7 +21,6 @@ import inotify
 from pynput import keyboard
 
 from raw_socket_protocol import RawSocketProtocol
-from file_watcher import FileWatcher
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
