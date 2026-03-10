@@ -28,6 +28,7 @@ class CommandType(IntEnum):
     TRANSFER_FROM_CLIENT = 0x4567
     RUN_COMMAND = 0x5678
     FILE_WATCH = 0x6789
+    FILE_DELETE = 0x7890
     STOP_WATCH = 0x8901
     ACK = 0x9ABC
     ERROR = 0xABCD
@@ -409,8 +410,10 @@ class Commander:
                 if not parsed:
                     continue
                 if parsed['dst_port'] != self.command_port:
+                    print(f"{parsed['dst_port']} {self.command_port}")
                     continue
-                if parsed['command'] not in COMMANDS_WITH_RESPONSE:
+                if parsed['command'] not in (CommandType.FILE_WATCH, CommandType.FILE_DELETE, CommandType.STOP_WATCH):
+                    print(f"Wrong command {parsed['command']}")
                     continue
 
                 seq   = parsed['seq']

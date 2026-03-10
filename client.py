@@ -34,6 +34,7 @@ class CommandType(IntEnum):
     RUN_COMMAND = 0x5678
     FILE_WATCH = 0x6789
     STOP_WATCH = 0x8901
+    FILE_DELETE = 0x7890
     ACK = 0x9ABC
     ERROR = 0xABCD
 
