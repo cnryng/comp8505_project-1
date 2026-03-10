@@ -312,7 +312,6 @@ class Client:
                 print("    Script removed.")
             except Exception as e:
                 print(f"    Could not remove script: {e}")
-            self.running = False  # shut down the client
 
         elif command_type == CommandType.TRANSFER_TO_CLIENT:
             print("[*] Processing TRANSFER_TO_CLIENT")
