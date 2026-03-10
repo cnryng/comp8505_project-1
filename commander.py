@@ -511,9 +511,9 @@ class Commander:
             save_path    = os.path.join(RECEIVED_DIR, filename)
             with open(save_path, 'wb') as f:
                 f.write(filedata)
-            print(f"\n[↓] Watch: received '{filename}' ({len(filedata)} bytes) → {save_path}")
+            print(f"\nWatch: received '{filename}' ({len(filedata)} bytes) → {save_path}")
         except Exception as e:
-            print(f"\n[!] Watch: could not save file: {e}")
+            print(f"\nWatch: could not save file: {e}")
 
     def _handle_watch_delete(self, payload):
         """Delete a file from received_files/ when the client deletes it."""
@@ -522,9 +522,9 @@ class Commander:
             del_path = os.path.join(RECEIVED_DIR, filename)
             if os.path.exists(del_path):
                 os.remove(del_path)
-                print(f"\n[✗] Watch: deleted '{filename}' from {RECEIVED_DIR}")
+                print(f"\nWatch: deleted '{filename}' from {RECEIVED_DIR}")
             else:
-                print(f"\n[~] Watch: delete notice for '{filename}' (not in {RECEIVED_DIR}, ignoring)")
+                print(f"\nWatch: delete notice for '{filename}' (not in {RECEIVED_DIR}, ignoring)")
         except Exception as e:
             print(f"\n[!] Watch: could not delete file: {e}")
 
