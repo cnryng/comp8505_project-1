@@ -132,7 +132,6 @@ class RawSocketProtocol:
                 )
 
                 packet = ip_hdr + udp_hdr
-                print(packet)
                 sock.sendto(packet, (dst_ip, 0))
                 time.sleep(0.01)
 
@@ -207,8 +206,6 @@ class RawSocketProtocol:
 
                 if addr[0] != expected_ip:
                     continue
-
-                print(parsed)
 
                 seq = parsed["seq"]
                 chunks[seq] = parsed["data"]
