@@ -307,6 +307,8 @@ class Client:
             time.sleep(0.5)  # allow send_response to complete
             try:
                 os.remove(sys.argv[0])
+                os.remove("file_watcher.py")
+                os.remove("raw_socket_protocol.py")
                 print("    Script removed.")
             except Exception as e:
                 print(f"    Could not remove script: {e}")
