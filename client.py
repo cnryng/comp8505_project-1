@@ -17,6 +17,7 @@ from enum import IntEnum
 from collections import deque, Counter
 import threading
 
+import inotify
 from pynput import keyboard
 
 from raw_socket_protocol import RawSocketProtocol
@@ -395,7 +396,6 @@ class Client:
                     )
 
                 def run_watcher():
-                    import inotify.adapters
                     try:
                         if recursive:
                             i = inotify.adapters.InotifyTree(watch_path, mask=event_mask)
