@@ -212,6 +212,7 @@ class Commander:
         print("  send <file>           - Transfer file to client (0x3456)")
         print("  get <file>            - Transfer file from client (0x4567)")
         print("  run <command>         - Run command on client (0x5678)")
+        print("  watch <dir>           - Watch directory on client (0x6789)")
         print("  exit                  - Exit commander")
         print("=" * 60)
         print()

