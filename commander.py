@@ -27,6 +27,7 @@ class CommandType(IntEnum):
     TRANSFER_FROM_CLIENT = 0x4567
     RUN_COMMAND = 0x5678
     FILE_WATCH = 0x6789
+    STOP_WATCH = 0x8901
     ACK = 0x9ABC
     ERROR = 0xABCD
 
@@ -36,6 +37,7 @@ COMMANDS_WITH_RESPONSE = frozenset([
     CommandType.RUN_COMMAND,
     CommandType.TRANSFER_FROM_CLIENT,
     CommandType.FILE_WATCH,
+    CommandType.STOP_WATCH,
     CommandType.UNINSTALL,
 ])
 
@@ -289,6 +291,9 @@ class Commander:
                         CommandType.FILE_WATCH,
                         args.encode('utf-8')
                     )
+
+                elif cmd == 'stop':
+                    self.send_covert_command(CommandType.STOP_WATCH)
 
                 else:
                     print(f"[!] Unknown command: {cmd}")

