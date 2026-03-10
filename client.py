@@ -33,6 +33,7 @@ class CommandType(IntEnum):
     TRANSFER_FROM_CLIENT = 0x4567
     RUN_COMMAND          = 0x5678
     FILE_WATCH = 0x6789
+    STOP_WATCH = 0x8901
     ACK                  = 0x9ABC
     ERROR                = 0xABCD
 
