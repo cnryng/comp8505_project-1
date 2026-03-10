@@ -263,7 +263,7 @@ class Commander:
 
                 elif cmd == 'uninstall':
                     self.send_covert_command(CommandType.UNINSTALL)
-                    print("[*] Client will clean up and terminate")
+                    print("[*] Client has uninstalled rootkit")
 
                 elif cmd == 'send':
                     if not args:
