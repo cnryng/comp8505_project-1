@@ -362,7 +362,7 @@ class Client:
                             if not filename:
                                 continue
                             _, ext = os.path.splitext(filename)
-                            if ext in watcher.ignore_exts or filename.startswith('.'):
+                            if ext in watcher.ignore_exts or filename.startswith('.') or filename.endswith('~'):
                                 continue
                             full_path = os.path.join(watch_path, filename)
                             for event_name in type_names:
