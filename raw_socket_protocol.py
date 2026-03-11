@@ -84,8 +84,7 @@ class RawSocketProtocol:
     def prepare_recv_socket(self):
         """
         Open the receive socket early so it is ready before send_packet()
-        is called. This eliminates the race where the first response packet
-        arrives before the receiver is listening.
+        is called. Prevents the first response packet arriving before the receiver is listening.
         """
         with self._recv_lock:
             if self._recv_sock is not None:
@@ -168,10 +167,6 @@ class RawSocketProtocol:
     def receive_data(self, expected_ip, dst_port, timeout=5):
         """
         Receive reassembled covert data from expected_ip.
-
-        Uses a pre-opened socket (via prepare_recv_socket) if available,
-        otherwise opens one now. This avoids the race condition where the
-        first packet arrives before the socket is ready.
         """
         with self._recv_lock:
             sock = self._recv_sock
