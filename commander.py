@@ -520,7 +520,7 @@ class Commander:
     def _handle_watch_delete(self, payload):
         """Delete a file securely from RECEIVED_DIR."""
         try:
-            filename = os.path.basename(payload.decode('utf-8').replace('\x00', '').strip()
+            filename = os.path.basename(payload.decode('utf-8').replace('\x00', '').strip())
             if not filename:
                 return
             del_path = os.path.abspath(os.path.join(RECEIVED_DIR, filename))
