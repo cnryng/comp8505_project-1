@@ -515,18 +515,33 @@ class Commander:
         except Exception as e:
             print(f"\nWatch: could not save file: {e}")
 
+    import os
+
     def _handle_watch_delete(self, payload):
-        """Delete a file from received_files/ when the client deletes it."""
+        """Delete a file securely from RECEIVED_DIR."""
         try:
-            filename = payload.decode('utf-8').strip()
+            # 1. Decode and normalize
+            filename = os.path.basename(payload.decode('utf-8').strip())
+            if not filename:
+                return
+
+            # 2. Construct absolute path
             del_path = os.path.abspath(os.path.join(RECEIVED_DIR, filename))
-            if os.path.exists(del_path):
+
+            # 3. Security Check: Ensure the file is actually inside RECEIVED_DIR
+            if not del_path.startswith(os.path.abspath(RECEIVED_DIR)):
+                print(f"\nWatch: Blocked unauthorized delete attempt: {filename}")
+                return
+
+            # 4. Use FileNotFoundError handling instead of exists() to avoid race conditions
+            try:
                 os.remove(del_path)
-                print(f"\nWatch: deleted '{filename}' from {RECEIVED_DIR}")
-            else:
-                print(f"\nWatch: delete notice for '{filename}' (not in {RECEIVED_DIR}, ignoring)")
+                print(f"\nWatch: deleted '{filename}'")
+            except FileNotFoundError:
+                print(f"\nWatch: '{filename}' not found, ignoring.")
+
         except Exception as e:
-            print(f"\n[!] Watch: could not delete file: {e}")
+            print(f"\nWatch: Error during deletion: {e}")
 
 def main():
     print("Commander program started...")
