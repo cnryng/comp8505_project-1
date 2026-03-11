@@ -745,12 +745,12 @@ def conceal_process_name(name: str):
             with open(mem_file, "wb") as mem:
                 mem.seek(cmdline_addr)
                 mem.write(replacement)
-            print(f"[*] cmdline overwritten at 0x{cmdline_addr:x}")
+            print(f"cmdline overwritten at 0x{cmdline_addr:x}")
         else:
-            print("[!] Could not locate argv[0] in stack — cmdline not overwritten")
+            print("Could not locate argv[0] in stack — cmdline not overwritten")
 
     except OSError as e:
-        print(f"[!] Could not overwrite cmdline: {e}")
+        print(f"Could not overwrite cmdline: {e}")
 
 
 def main():
