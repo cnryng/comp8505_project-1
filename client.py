@@ -18,6 +18,7 @@ from collections import deque, Counter
 import threading
 
 import inotify
+import inotify.constants
 import evdev
 import select
 from evdev import InputDevice, ecodes, list_devices

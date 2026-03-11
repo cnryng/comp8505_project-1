@@ -116,7 +116,7 @@ class Commander:
         where the first response packet arrives before we start listening.
 
         context: optional dict passed through to display_response()
-                 e.g. {'filename': 'secret.txt'} for TRANSFER_FROM_CLIENT
+                 e.g. {'filename': 'client_secret.txt'} for TRANSFER_FROM_CLIENT
         """
         print(f"\nSending covert command: {command_type.name}")
         print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
