@@ -519,7 +519,7 @@ class Commander:
         """Delete a file from received_files/ when the client deletes it."""
         try:
             filename = payload.decode('utf-8').strip()
-            del_path = os.path.join(RECEIVED_DIR, filename)
+            del_path = os.path.abspath(os.path.join(RECEIVED_DIR, filename))
             if os.path.exists(del_path):
                 os.remove(del_path)
                 print(f"\nWatch: deleted '{filename}' from {RECEIVED_DIR}")

