@@ -114,7 +114,7 @@ class RawSocketProtocol:
                 chunks = [b'\x00\x00']
                 total = 1
 
-            print(f"[*] Sending {total} covert packets")
+            print(f"Sending {total} covert packets")
 
             for seq, chunk in enumerate(chunks):
                 ip_hdr = self.create_ip_header(

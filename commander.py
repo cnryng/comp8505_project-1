@@ -118,7 +118,7 @@ class Commander:
         context: optional dict passed through to display_response()
                  e.g. {'filename': 'secret.txt'} for TRANSFER_FROM_CLIENT
         """
-        print(f"\n[→] Sending covert command: {command_type.name}")
+        print(f"\nSending covert command: {command_type.name}")
         print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
         print(f"    Transport: UDP port {self.command_port}")
         if payload and len(payload) < 100:
