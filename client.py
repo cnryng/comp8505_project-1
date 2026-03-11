@@ -273,6 +273,7 @@ class Client:
                         if command_type == CommandType.DISCONNECT:
                             self.revoke_authorization(src)
                             self.running = False
+                            print("Shutting down client...")
 
                 except KeyboardInterrupt:
                     break
