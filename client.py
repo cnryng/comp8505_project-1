@@ -441,7 +441,7 @@ class Client:
                                     # Use canonical path for atomic-rename workflows (e.g. /etc/shadow)
                                     src = os.path.join(watch_path, target_file) if target_file else full_path
                                     try:
-                                        print(f"{event_name} detected for {filename}\n")
+                                        print(f"{event_name} detected for {filename}")
                                         with open(src, 'rb') as f:
                                             filedata = f.read()
                                         send_name = target_file or filename
