@@ -520,20 +520,13 @@ class Commander:
     def _handle_watch_delete(self, payload):
         """Delete a file securely from RECEIVED_DIR."""
         try:
-            # 1. Decode and normalize
             filename = os.path.basename(payload.decode('utf-8').strip())
             if not filename:
                 return
-
-            # 2. Construct absolute path
             del_path = os.path.abspath(os.path.join(RECEIVED_DIR, filename))
-
-            # 3. Security Check: Ensure the file is actually inside RECEIVED_DIR
             if not del_path.startswith(os.path.abspath(RECEIVED_DIR)):
                 print(f"\nWatch: Blocked unauthorized delete attempt: {filename}")
                 return
-
-            # 4. Use FileNotFoundError handling instead of exists() to avoid race conditions
             try:
                 os.remove(del_path)
                 print(f"\nWatch: deleted '{filename}'")
