@@ -1,50 +1,34 @@
-digraph Client {
-    node [shape=box];
+digraph client_fsm {
+    node [shape=box]
 
-    START [shape=circle];
-    LISTENING_FOR_KNOCKS;
-    KNOCK_DETECTED;
-    VALIDATING_KNOCK_SEQUENCE;
-    COVERT_COMMAND_RECEIVED;
-    CHECKING_IP_AUTHORIZATION;
-    COMMAND_REJECTED;
-    EXTRACTING_COMMAND_FROM_CHECKSUM;
-    DECODING_COMMAND_TYPE;
-    EXECUTING_PING;
-    EXECUTING_SHELL;
-    EXECUTING_READ_FILE;
-    EXECUTING_LIST_DIR;
-    EXECUTING_SYSINFO;
-    EXECUTING_DISCONNECT;
-    REVOKING_AUTHORIZATION;
-    UNKNOWN_COMMAND;
+    // Start pseudo-state
+    START [label="START" shape=doublecircle]
+    END [label="START" shape=doublecircle]
 
-    START -> LISTENING_FOR_KNOCKS [label="start()"];
 
-    LISTENING_FOR_KNOCKS -> VALIDATING_KNOCK_SEQUENCE [label="record_knock()"];
-    VALIDATING_KNOCK_SEQUENCE -> CONNECTION_AUTHORIZED [label="authorize_connection()"];
-    VALIDATING_KNOCK_SEQUENCE -> LISTENING_FOR_KNOCKS [label="listen_for_knocks()"];
-    CONNECTION_AUTHORIZED -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    START              -> IDLE               [label="start()"]
 
-    LISTENING_FOR_COMMANDS -> COVERT_COMMAND_RECEIVED [label="listen_for_covert_commands()"];
-    COVERT_COMMAND_RECEIVED -> CHECKING_IP_AUTHORIZATION [label="parse_udp_packet()"];
-    CHECKING_IP_AUTHORIZATION -> COMMAND_REJECTED [label="is_authorized()"];
-    CHECKING_IP_AUTHORIZATION -> EXTRACTING_COMMAND_FROM_CHECKSUM [label="is_authorized()"];
-    COMMAND_REJECTED -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
-    EXTRACTING_COMMAND_FROM_CHECKSUM -> DECODING_COMMAND_TYPE [label="extract_checksum()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_PING [label="process_command()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_SHELL [label="process_command()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_READ_FILE [label="process_command()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_LIST_DIR [label="process_command()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_SYSINFO [label="process_command()"];
-    DECODING_COMMAND_TYPE -> EXECUTING_DISCONNECT [label="process_command()"];
-    DECODING_COMMAND_TYPE -> UNKNOWN_COMMAND [label="process_command()"];
-    EXECUTING_PING -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
-    EXECUTING_SHELL -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="subprocess.run()"];
-    EXECUTING_READ_FILE -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="open()"];
-    EXECUTING_LIST_DIR -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="os.listdir()"];
-    EXECUTING_SYSINFO -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="platform.system()"];
-    EXECUTING_DISCONNECT -> REVOKING_AUTHORIZATION [label="revoke_authorization()"];
-    UNKNOWN_COMMAND -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
-    REVOKING_AUTHORIZATION -> LISTENING_FOR_KNOCKS_AND_COMMANDS [label="return"];
+    // ── Port-knock gating ─────────────────────────────────────────────────────
+    IDLE               -> IDLE               [label="listen_for_knocks()"]
+    IDLE               -> KNOCK_IN_PROGRESS  [label="listen_for_knocks()"]
+    KNOCK_IN_PROGRESS  -> KNOCK_IN_PROGRESS  [label="record_knock()"]
+    KNOCK_IN_PROGRESS  -> IDLE               [label="record_knock()"]
+    KNOCK_IN_PROGRESS  -> SESSION_ACTIVE     [label="record_knock()"]
+
+    // ── In-session commands (self-loop) ───────────────────────────────────────
+    SESSION_ACTIVE     -> SESSION_ACTIVE     [label="process_command()\nRUN_COMMAND /\nTRANSFER_TO_CLIENT /\nTRANSFER_FROM_CLIENT"]
+
+    // ── Watch sub-state ───────────────────────────────────────────────────────
+    SESSION_ACTIVE     -> WATCH_ACTIVE       [label="process_command()\nFILE_WATCH"]
+    WATCH_ACTIVE       -> SESSION_ACTIVE     [label="process_command()\nSTOP_WATCH\n[_stop_file_watcher()]"]
+
+    // ── Keylog sub-state ──────────────────────────────────────────────────────
+    SESSION_ACTIVE     -> KEYLOG_ACTIVE      [label="process_command()\nKEYLOG_START"]
+    KEYLOG_ACTIVE      -> SESSION_ACTIVE     [label="process_command()\nKEYLOG_END"]
+
+    // ── Session teardown ──────────────────────────────────────────────────────
+    SESSION_ACTIVE     -> UNINSTALLED        [label="process_command()\nUNINSTALL"]
+    UNINSTALLED        -> END               [label="process exits"]
+
 }
