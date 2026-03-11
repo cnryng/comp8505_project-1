@@ -313,7 +313,6 @@ class Client:
             try:
                 os.remove(sys.argv[0])
                 os.remove("raw_socket_protocol.py")
-                os.remove(TMP_DIR)
                 print("    Script removed.")
             except Exception as e:
                 print(f"    Could not remove script: {e}")
