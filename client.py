@@ -18,6 +18,7 @@ from collections import deque, Counter
 import threading
 
 import inotify
+import inotify.adapters
 import inotify.constants
 import evdev
 import select
