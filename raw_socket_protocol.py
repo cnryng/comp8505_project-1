@@ -4,10 +4,10 @@ import time
 import threading
 
 CHUNK_SIZE = 2
-FLAG_DATA = 0
-FLAG_ACK = 1
-FLAG_START = 2
-FLAG_END = 3
+# FLAG_DATA = 0
+# FLAG_ACK = 1
+# FLAG_START = 2
+# FLAG_END = 3
 
 DUMMY_PAYLOAD = b'\x00' * 4
 
@@ -138,7 +138,7 @@ class RawSocketProtocol:
             return True
 
         except Exception as e:
-            print(f"[!] send error: {e}")
+            print(f"Error: {e}")
             return False
 
     def parse_udp_packet(self, packet):
@@ -174,8 +174,6 @@ class RawSocketProtocol:
 
         if sock is None:
             # Fallback: no pre-opened socket — open one now (may miss first packet)
-            print("[!] Warning: receive socket was not prepared in advance — "
-                  "first packet may be dropped. Call prepare_recv_socket() before send_packet().")
             sock = self._open_recv_socket()
 
         sock.settimeout(timeout)
@@ -221,7 +219,7 @@ class RawSocketProtocol:
         received_seqs = set(chunks.keys())
         if expected_seqs != received_seqs:
             missing = expected_seqs - received_seqs
-            print(f"[!] Missing sequences: {missing} — payload may be corrupt")
+            print(f"Missing sequences: {missing}")
 
         # Reassemble in order
         ordered = b''.join(chunks[i] for i in sorted(chunks))
